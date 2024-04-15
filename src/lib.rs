@@ -90,6 +90,17 @@ impl Outline {
     ) {
         self.transform_inner(Default::default(), &mut f);
     }
+
+    /// Get an attribute value deserialized to type.
+    pub fn get<'a, T: Deserialize<'a>>(&'a self, name: &str) -> Result<Option<T>> {
+        let Some(a) = self.0.0.get(name) else { return Ok(None); };
+        Ok(Some(idm::from_str(a)?))
+    }
+
+    pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
+        self.0.0.insert(name.to_owned(), idm::to_string(value)?);
+        Ok(())
+    }
 }
 
 /// Context object for a value deserialized from a directory on disk.
