@@ -1,11 +1,12 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Write},
     fs,
     path::{Path, PathBuf},
 };
 
 use anyhow::{bail, Result};
+use derive_more::{Deref, DerefMut};
 use idm::ser::Indentation;
 use indexmap::IndexMap;
 use lazy_regex::regex;
@@ -91,8 +92,71 @@ impl Outline {
     }
 }
 
+/// Context object for a value deserialized from a directory on disk.
+#[derive(Clone, Deref, DerefMut, Debug)]
+pub struct Collection<T> {
+    #[deref]
+    #[deref_mut]
+    pub inner: T,
+    pub style: Indentation,
+    path: PathBuf,
+    input_files: BTreeSet<PathBuf>,
+}
+
+impl<T> Collection<T> {
+    /// Read an IDM outline from a directory.
+    ///
+    /// Subdirectory names get renamed to have trailing slashes so that
+    /// subdirectory structure can be preserved when the value is written out
+    /// again.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self>
+    where
+        T: DeserializeOwned,
+    {
+        let mut idm = String::new();
+        let mut input_files = BTreeSet::default();
+        let mut style = None;
+
+        read_directory(
+            &mut idm,
+            &mut input_files,
+            &mut style,
+            "",
+            true,
+            &path,
+        )?;
+
+        Ok(Collection {
+            inner: idm::from_str(&idm)?,
+            style: style.unwrap_or_default(),
+            path: path.as_ref().to_owned(),
+            input_files,
+        })
+    }
+
+    /// Save the collection to disk. Files that were present when the
+    /// collection was loaded but are no longer generated from the new value
+    /// will be deleted.
+    pub fn save(&self) -> Result<BTreeSet<PathBuf>>
+    where
+        T: Serialize,
+    {
+        let output_files =
+            write_outline_directory(&self.path, self.style, &self.inner)?;
+
+        // Delete files that were present in input but are no longer around
+        // with the serialization of the changed(?) inner value.
+        for removed_path in self.input_files.difference(&output_files) {
+            tidy_delete(&self.path, removed_path)?;
+        }
+
+        Ok(output_files)
+    }
+}
+
 fn read_directory(
     output: &mut String,
+    paths: &mut BTreeSet<PathBuf>,
     style: &mut Option<Indentation>,
     prefix: &str,
     outline_mode: bool,
@@ -159,12 +223,15 @@ fn read_directory(
             // Recurse into subdirectory.
             read_directory(
                 output,
+                paths,
                 style,
                 &format!("{prefix}  "),
                 outline_mode,
                 path,
             )?;
         } else if path.is_file() {
+            paths.insert(path.clone());
+
             let text = fs::read_to_string(&path)?;
 
             // It's a single line, just put it right after the headword.
@@ -219,20 +286,6 @@ fn read_directory(
     Ok(())
 }
 
-/// Read heterogeneous IDM outline directory.
-///
-/// Subdirectories are renamed to have a slash behind them so they get
-/// rewritten as subdirectories when the outline is written out.
-pub fn read_outline_directory<T: DeserializeOwned>(
-    path: impl AsRef<Path>,
-) -> Result<(T, Indentation)> {
-    let mut idm = String::new();
-    let mut indentation = None;
-    read_directory(&mut idm, &mut indentation, "", true, path)?;
-
-    Ok((idm::from_str(&idm)?, indentation.unwrap_or_default()))
-}
-
 /// Read a structured IDM data directory.
 ///
 /// Subdirectory names are read as is, subdirectory structure will not be
@@ -242,7 +295,14 @@ pub fn read_data_directory<T: DeserializeOwned>(
 ) -> Result<T> {
     let mut idm = String::new();
     let mut indentation = None;
-    read_directory(&mut idm, &mut indentation, "", false, path)?;
+    read_directory(
+        &mut idm,
+        &mut Default::default(),
+        &mut indentation,
+        "",
+        false,
+        path,
+    )?;
 
     Ok(idm::from_str(&idm)?)
 }
@@ -314,35 +374,13 @@ fn write_directory(
     path: impl AsRef<Path>,
     style: Indentation,
     data: &Outline,
-) -> Result<()> {
+) -> Result<BTreeSet<PathBuf>> {
     // See that we can build all the contents successfully before deleting
     // anything.
     let mut files = BTreeMap::default();
     build_files(&mut files, path.as_ref(), style, data)?;
 
-    // Clean out old stuff.
-    for e in fs::read_dir(path.as_ref())? {
-        let e = e?;
-        let path = e.path();
-
-        let Some(file_name) = path.file_name() else {
-            continue;
-        };
-        let file_name = file_name.to_string_lossy();
-
-        if file_name.starts_with('.') {
-            log::debug!("write_directory: skipping dotfile {path:?}");
-            continue;
-        }
-
-        if path.is_dir() {
-            log::debug!("write_directory: Removing existing dir {path:?}");
-            fs::remove_dir_all(path)?;
-        } else {
-            log::debug!("write_directory: Removing existing file {path:?}");
-            fs::remove_file(path)?;
-        }
-    }
+    let paths = files.keys().cloned().collect();
 
     for (path, content) in files {
         if let Some(dir) = path.parent() {
@@ -351,14 +389,14 @@ fn write_directory(
         fs::write(path, content)?;
     }
 
-    Ok(())
+    Ok(paths)
 }
 
 pub fn write_outline_directory<T: Serialize>(
     path: impl AsRef<Path>,
     style: Indentation,
     value: &T,
-) -> Result<()> {
+) -> Result<BTreeSet<PathBuf>> {
     let tree: Outline = idm::transmute(value)?;
 
     write_directory(path, style, &tree)
@@ -366,4 +404,37 @@ pub fn write_outline_directory<T: Serialize>(
 
 fn is_valid_filename(s: impl AsRef<str>) -> bool {
     regex!(r"^:?[A-Za-z0-9_-][.A-Za-z0-9_-]*$").is_match(s.as_ref())
+}
+
+/// Delete file at `path` and any empty subdirectories between `root` and
+/// `path`.
+///
+/// This is a git-style file delete that deletes the containing subdirectory
+/// if it's emptied of files.
+fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
+    fs::remove_file(path)?;
+    log::debug!("tidy_delete: Deleted {path:?}");
+
+    loop {
+        // Keep going up the subdirectories...
+        if let Some(parent) = path.parent() {
+            path = parent;
+        } else {
+            break;
+        }
+
+        // ...that are underneath `root`...
+        if !path.starts_with(root) || path.components().count() <= root.components().count() {
+            break;
+        }
+
+        // ...and deleting them if you can.
+        if let Ok(_) = fs::remove_dir(path) {
+            log::debug!("tidy_delete: Deleted empty subdirectory {path:?}");
+        } else {
+            break;
+        }
+    }
+
+    Ok(())
 }

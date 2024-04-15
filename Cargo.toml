@@ -11,6 +11,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = "1"
+derive_more = "0.99"
 idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 lazy-regex = "3"

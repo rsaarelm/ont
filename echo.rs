@@ -8,13 +8,13 @@
 //! ```
 
 use anyhow::Result;
-use idm_tools::{read_outline_directory, write_outline_directory, Outline};
+use idm_tools::{Collection, Outline};
 
 fn main() -> Result<()> {
     let path = &std::env::args().collect::<Vec<_>>()[1];
-    let (outline, style): (Outline, _) = read_outline_directory(path).unwrap();
+    let collection: Collection<Outline> = Collection::load(path).unwrap();
 
     //print!("{}", idm::to_string_styled(style, &outline)?);
-    write_outline_directory(path, style, &outline).unwrap();
+    collection.save().unwrap();
     Ok(())
 }
