@@ -18,16 +18,14 @@ fn main() -> Result<()> {
 
     let mut hist: BTreeMap<String, usize> = BTreeMap::default();
 
-    collection.for_each::<BTreeSet<String>>(
-        |mut a, sec| {
-            if let Some(tags) = sec.1.get::<BTreeSet<String>>("tags").unwrap() {
-                a.extend(tags.iter().cloned());
-                for tag in &a {
-                    *hist.entry(tag.into()).or_default() += 1;
-                }
+    for (a, sec) in collection.context_iter_mut(BTreeSet::default()) {
+        if let Some(tags) = sec.1.get::<BTreeSet<String>>("tags").unwrap() {
+            a.extend(tags.iter().cloned());
+            for tag in a.iter() {
+                *hist.entry(tag.into()).or_default() += 1;
             }
-            a
-        });
+        }
+    }
 
     for (tag, n) in &hist {
         println!("{tag:32} {n}");

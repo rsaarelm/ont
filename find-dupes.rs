@@ -10,7 +10,7 @@
 //! lazy-regex = "3"
 //! ```
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use anyhow::{bail, Result};
 use idm_tools::{Collection, Outline, Section};
@@ -25,13 +25,17 @@ enum Id {
 impl TryFrom<Section> for Id {
     type Error = anyhow::Error;
 
-    fn try_from(
-        ((head,), Outline((attrs,), _)): Section,
-    ) -> Result<Self> {
+    fn try_from(((head,), Outline((attrs,), _)): Section) -> Result<Self> {
         if let Some(title) = wiki_title(&head) {
             Ok(Id::Title(title.into()))
         } else if let Some(uri) = attrs.get("uri") {
-            Ok(Id::Uri(uri.into()))
+            // Normalize http/https differences.
+            let uri = if uri.starts_with("http") {
+                format!("https:{}", uri.split(':').nth(1).unwrap())
+            } else {
+                uri.into()
+            };
+            Ok(Id::Uri(uri))
         } else {
             bail!("not an object")
         }
@@ -44,14 +48,16 @@ fn main() -> Result<()> {
 
     let mut seen: BTreeSet<Id> = BTreeSet::default();
 
-    collection.for_each::<()>(|mut a, s| {
-        let Ok(id) = Id::try_from(s) else { return () };
+    // TODO: Have non-mut iter in collection too.
+    for s in collection.iter_mut() {
+        let Ok(id) = Id::try_from(s.clone()) else {
+            continue;
+        };
         if seen.contains(&id) {
             println!("{id:?}");
         }
         seen.insert(id);
-        ()
-    });
+    }
 
     Ok(())
 }

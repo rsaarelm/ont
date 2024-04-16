@@ -18,6 +18,95 @@ pub type Section = ((String,), Outline);
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Outline(pub (IndexMap<String, String>,), pub Vec<Section>);
 
+pub struct ContextIterMut<'a, C> {
+    // (context-value, pointer-to-current-item, pointer-past-last-item)
+    stack: Vec<(C, *mut Section, *mut Section)>,
+    phantom: std::marker::PhantomData<&'a Section>,
+}
+
+impl<'a, C: Clone> ContextIterMut<'a, C> {
+    fn new(outline: &'a mut Outline, init: C) -> Self {
+        let stack = vec![unsafe {
+            let a = outline.1.as_mut_ptr();
+            let b = a.add(outline.1.len());
+            (init, a, b)
+        }];
+        ContextIterMut {
+            stack,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
+    type Item = (&'a mut C, &'a mut Section);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Remove completed ranges.
+        while !self.stack.is_empty() {
+            let (_, begin, end) = self.stack[self.stack.len() - 1];
+            if begin == end {
+                self.stack.pop();
+            } else {
+                break;
+            }
+        }
+
+        // End iteration if no more content left.
+        if self.stack.is_empty() {
+            return None;
+        }
+
+        let len = self.stack.len();
+        // Clone current context object. The clone is pushed for next stack
+        // layer and passed as mutable pointer to the iterating context.
+        // Context changes will show up in children.
+        let ctx = self.stack[len - 1].0.clone();
+        let begin = self.stack[len - 1].1;
+
+        // Safety analysis statement: I dunno lol
+        unsafe {
+            let children = &mut (*begin).1 .1;
+            self.stack[len - 1].1 = begin.add(1);
+            let a = children.as_mut_ptr();
+            let b = a.add(children.len());
+            self.stack.push((ctx, a, b));
+            let ctx = &mut self.stack[len].0 as *mut C;
+
+            Some((&mut *ctx, &mut *begin))
+        }
+    }
+}
+
+impl Outline {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Section> {
+        self.context_iter_mut(()).map(|x| x.1)
+    }
+
+    pub fn context_iter_mut<C: Clone>(
+        &mut self,
+        init: C,
+    ) -> ContextIterMut<'_, C> {
+        ContextIterMut::new(self, init)
+    }
+
+    /// Get an attribute value deserialized to type.
+    pub fn get<'a, T: Deserialize<'a>>(
+        &'a self,
+        name: &str,
+    ) -> Result<Option<T>> {
+        let Some(a) = self.0 .0.get(name) else {
+            return Ok(None);
+        };
+        Ok(Some(idm::from_str(a)?))
+    }
+
+    pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
+        self.0 .0.insert(name.to_owned(), idm::to_string(value)?);
+        Ok(())
+    }
+}
+
 pub type SimpleSection = ((String,), SimpleOutline);
 
 /// An outline without a separately parsed header section.
@@ -44,82 +133,6 @@ impl fmt::Display for SimpleOutline {
         }
 
         print(f, 0, self)
-    }
-}
-
-impl Outline {
-    fn transform_inner<C: Default + Clone>(
-        &mut self,
-        ctx: C,
-        f: &mut impl FnMut(C, Section) -> (C, Vec<Section>),
-    ) {
-        let mut n = 0;
-        while n < self.1.len() {
-            let mut sec = Section::default();
-            std::mem::swap(&mut sec, &mut self.1[n]);
-            let (new_ctx, mut otl) = f(ctx.clone(), sec);
-
-            let span = if otl.is_empty() {
-                // Removed a section.
-                self.1.swap_remove(n);
-                0
-            } else if otl.len() == 1 {
-                // Replaced a section.
-                self.1[n] = otl.pop().unwrap();
-                1
-            } else {
-                // Expansion into multiple sections.
-                let tail = self.1.split_off(n);
-                let len = otl.len();
-                self.1.extend(otl);
-                self.1.extend(tail);
-                len
-            };
-
-            // Recurse to new sections.
-            for i in n..(n + span) {
-                self.1[i].1.transform_inner(new_ctx.clone(), f);
-            }
-            n += span;
-        }
-    }
-
-    /// Iterate and rewrite sections of the collection recursively.
-    ///
-    /// A context object of type `C` is passed down the branches and can be
-    /// modified during traversal.
-    pub fn transform<C: Default + Clone>(
-        &mut self,
-        mut f: impl FnMut(C, Section) -> (C, Vec<Section>),
-    ) {
-        self.transform_inner(Default::default(), &mut f);
-    }
-
-    /// Iterate sections of the collection recursively.
-    ///
-    /// A context object of type `C` is passed down the branches and can be
-    /// modified during traversal.
-    pub fn for_each<C: Default + Clone>(
-        &mut self,
-        mut f: impl FnMut(C, Section) -> C,
-    ) {
-        // XXX: Make this more efficient by using a separate inner traversal
-        // function that doesn't rewrite the sections at all.
-        self.transform_inner(Default::default(), &mut |c, s| {
-            let ret = vec![s.clone()];
-            (f(c, s), ret)
-        })
-    }
-
-    /// Get an attribute value deserialized to type.
-    pub fn get<'a, T: Deserialize<'a>>(&'a self, name: &str) -> Result<Option<T>> {
-        let Some(a) = self.0.0.get(name) else { return Ok(None); };
-        Ok(Some(idm::from_str(a)?))
-    }
-
-    pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
-        self.0.0.insert(name.to_owned(), idm::to_string(value)?);
-        Ok(())
     }
 }
 
@@ -455,7 +468,9 @@ fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
         }
 
         // ...that are underneath `root`...
-        if !path.starts_with(root) || path.components().count() <= root.components().count() {
+        if !path.starts_with(root)
+            || path.components().count() <= root.components().count()
+        {
             break;
         }
 
