@@ -84,11 +84,31 @@ impl Outline {
         }
     }
 
+    /// Iterate and rewrite sections of the collection recursively.
+    ///
+    /// A context object of type `C` is passed down the branches and can be
+    /// modified during traversal.
     pub fn transform<C: Default + Clone>(
         &mut self,
         mut f: impl FnMut(C, Section) -> (C, Vec<Section>),
     ) {
         self.transform_inner(Default::default(), &mut f);
+    }
+
+    /// Iterate sections of the collection recursively.
+    ///
+    /// A context object of type `C` is passed down the branches and can be
+    /// modified during traversal.
+    pub fn for_each<C: Default + Clone>(
+        &mut self,
+        mut f: impl FnMut(C, Section) -> C,
+    ) {
+        // XXX: Make this more efficient by using a separate inner traversal
+        // function that doesn't rewrite the sections at all.
+        self.transform_inner(Default::default(), &mut |c, s| {
+            let ret = vec![s.clone()];
+            (f(c, s), ret)
+        })
     }
 
     /// Get an attribute value deserialized to type.

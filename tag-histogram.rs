@@ -18,7 +18,7 @@ fn main() -> Result<()> {
 
     let mut hist: BTreeMap<String, usize> = BTreeMap::default();
 
-    collection.transform::<BTreeSet<String>>(
+    collection.for_each::<BTreeSet<String>>(
         |mut a, sec| {
             if let Some(tags) = sec.1.get::<BTreeSet<String>>("tags").unwrap() {
                 a.extend(tags.iter().cloned());
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
                     *hist.entry(tag.into()).or_default() += 1;
                 }
             }
-            (a, vec![sec])
+            a
         });
 
     for (tag, n) in &hist {
