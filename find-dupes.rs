@@ -63,6 +63,6 @@ fn main() -> Result<()> {
 }
 
 fn wiki_title(headline: &str) -> Option<&str> {
-    regex_captures!(r"^([A-Z][a-z]+([A-Z][a-z]+|\d+)+)( \*)?$", headline)
+    regex_captures!(r"^([A-Z][a-z]+([A-Z][a-z]+|\d+)+)(.otl)?( \*)?$", headline)
         .map(|(_, ret, _, _)| ret)
 }
