@@ -4,7 +4,7 @@
 //! [dependencies]
 //! anyhow = "1"
 //! idm = "0.4"
-//! idm-tools = { path = "/home/rsaarelm/work/idm-tools", version = "*" }
+//! idm-tools = { git = "https://github.com/rsaarelm/idm-tools", version = "*" }
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
