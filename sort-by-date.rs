@@ -23,29 +23,10 @@ struct Args {
     /// Bubble favorited items marked with trailing ` *` to top of list.
     #[arg(short = 'f', long, default_value_t = false)]
     separate_favorites: bool,
-}
 
-fn ord(
-    sort_faves: bool,
-    ((a_head,), a): &((String,), Outline),
-    ((b_head,), b): &((String,), Outline),
-) -> Ordering {
-    let a_head = if sort_faves {
-        !a_head.ends_with(" *")
-    } else {
-        false
-    };
-    let b_head = if sort_faves {
-        !b_head.ends_with(" *")
-    } else {
-        false
-    };
-
-    let blank = String::new();
-    let a_date = a.0 .0.get("date").unwrap_or(&blank);
-    let b_date = b.0 .0.get("date").unwrap_or(&blank);
-
-    (a_head, a_date).cmp(&(b_head, b_date))
+    /// Field that contains the value to lexically sort by.
+    #[arg(long, default_value = "date")]
+    sort_field: String,
 }
 
 fn main() -> Result<()> {
@@ -55,9 +36,32 @@ fn main() -> Result<()> {
     io::stdin().read_to_string(&mut stdin)?;
     let mut outline: Outline = idm::from_str(&stdin)?;
 
-    outline.1.sort_by(|a, b| ord(args.separate_favorites, a, b));
+    outline.1.sort_by(|a, b| ord(&args, a, b));
 
     print!("{}", idm::to_string_styled_like(&stdin, &outline).unwrap());
 
     Ok(())
+}
+
+fn ord(
+    args: &Args,
+    ((a_head,), a): &((String,), Outline),
+    ((b_head,), b): &((String,), Outline),
+) -> Ordering {
+    let a_head = if args.separate_favorites {
+        !a_head.ends_with(" *")
+    } else {
+        false
+    };
+    let b_head = if args.separate_favorites {
+        !b_head.ends_with(" *")
+    } else {
+        false
+    };
+
+    let blank = String::new();
+    let a_date = a.0 .0.get(&args.sort_field).unwrap_or(&blank);
+    let b_date = b.0 .0.get(&args.sort_field).unwrap_or(&blank);
+
+    (a_head, a_date).cmp(&(b_head, b_date))
 }
