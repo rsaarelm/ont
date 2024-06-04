@@ -2,6 +2,21 @@
 
 //! Weave outputs of embedded script files into the document.
 //!
+//! Example use:
+//! ```notrust
+//! This is an outline file
+//! Use filename followed by colon to indicate an embedded script file
+//! Have a shebang line as first line to show the script is executable
+//! Have a '==' marker immediately below the script to indicate
+//!   the script output should be captured and inserted under it
+//! demo.py:
+//!   #!/usr/bin/env python3
+//!   def fib(x): return x if x <= 1 else fib(x-1)+fib(x-2)
+//!   print([fib(i) for i in range(10)])
+//! ==
+//!   [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+//! ```
+//!
 //! ```cargo
 //! [dependencies]
 //! anyhow = "1"
@@ -19,8 +34,10 @@ const CACHE_SUBDIR: &str = ".idm-weave";
 
 use std::{
     fs,
+    io::Read,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 use anyhow::{bail, Result};
@@ -47,7 +64,8 @@ fn main() -> Result<()> {
     }
 
     // Read and parse file.
-    let input: Outline = idm::from_str(&fs::read_to_string(&args.path)?)?;
+    let text = fs::read_to_string(&args.path)?;
+    let input: Outline = idm::from_str(&text)?;
 
     // Generate cache subdirectory.
     let working_dir = args.path.parent().expect("Failed to get working dir");
@@ -76,6 +94,15 @@ fn main() -> Result<()> {
     );
 
     let orders = write_files(&cache_dir, &mut outline)?;
+    let outputs = run_files(&orders)?;
+    insert_outputs(&mut outline, &outputs)?;
+
+    log::info!("Rewriting outline {:?}", args.path);
+    // Munge the outline expression so we drop the synthesized toplevel.
+    fs::write(
+        &args.path,
+        idm::to_string_styled_like(&text, &outline.1[0].1)?,
+    )?;
 
     Ok(())
 }
@@ -86,65 +113,58 @@ fn write_files(
 ) -> Result<Vec<RunOrder>> {
     let mut ret = Vec::new();
 
-    for (scan_for_files, (_, Outline(_, body))) in
-        outline.context_iter_mut(true)
+    for (inside_file, ((head,), Outline(_, body))) in
+        outline.context_iter_mut(false)
     {
-        if !*scan_for_files {
+        if *inside_file {
+            continue;
+        }
+
+        if filename(&head).is_some() {
+            // Trying to go down a file, stop here.
+            *inside_file = true;
             continue;
         }
 
         for i in 0..body.len() {
             let head = body[i].0 .0.trim();
-            if let Some(head) = head.strip_suffix(':') {
-                // TODO Filename validation could be more robust. Must be a
-                // valid filename that isn't trying to escape containment with
-                // ".." or by starting with '/', but it can include
-                // subdirectory structure.
-                if !head.chars().any(|c| c.is_whitespace())
-                    && !head.contains("..")
-                    && !head.starts_with('/')
-                {
-                    let content = body[i].1.to_string();
+            if let Some(filename) = filename(head) {
+                let content = body[i].1.to_string();
 
-                    let filename = if head.is_empty() {
-                        // Get hash of content for an anonymous snippet.
-                        let mut hasher = Sha256::new();
-                        hasher.update(content.as_bytes());
-                        format!("{:X}", hasher.finalize())
-                    } else {
-                        head.to_owned()
-                    };
+                let filename = if filename.is_empty() {
+                    // Get hash of content for an anonymous snippet.
+                    let mut hasher = Sha256::new();
+                    hasher.update(content.as_bytes());
+                    format!("{:X}", hasher.finalize())
+                } else {
+                    filename.to_string()
+                };
 
-                    // Use context parameter to stop scanning when we've detected
-                    // a file.
-                    *scan_for_files = false;
+                let output_path = cache_dir.join(filename);
 
-                    let output_path = cache_dir.join(filename);
+                fs::write(&output_path, &content)?;
+                let capture_output =
+                    i < body.len() - 1 && body[i + 1].0 .0 == OUTPUT_MARKER;
 
-                    fs::write(&output_path, &content)?;
-                    let capture_output =
-                        i < body.len() - 1 && body[i + 1].0 .0 == OUTPUT_MARKER;
+                let is_executable = content.starts_with("#!");
 
-                    let is_executable = content.starts_with("#!");
+                if is_executable {
+                    fs::set_permissions(
+                        &output_path,
+                        fs::Permissions::from_mode(0o700),
+                    )?;
 
-                    if is_executable {
-                        fs::set_permissions(
-                            &output_path,
-                            fs::Permissions::from_mode(0o700),
-                        )?;
-
-                        ret.push(RunOrder {
-                            path: output_path.clone(),
-                            capture_output,
-                        });
-                    }
-
-                    log::info!(
-                        "Wrote {output_path:?}{}{}",
-                        if is_executable { " (x)" } else { "" },
-                        if capture_output { " (cap)" } else { "" }
-                    );
+                    ret.push(RunOrder {
+                        path: output_path.clone(),
+                        capture_output,
+                    });
                 }
+
+                log::info!(
+                    "Wrote {output_path:?}{}{}",
+                    if is_executable { " (x)" } else { "" },
+                    if capture_output { " (cap)" } else { "" }
+                );
             }
         }
     }
@@ -152,6 +172,94 @@ fn write_files(
     Ok(ret)
 }
 
+fn run_files(orders: &[RunOrder]) -> Result<Vec<String>> {
+    let mut ret = Vec::new();
+
+    for order in orders {
+        log::info!("Executing {:?}", order.path);
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg(&order.path)
+            .stdout(Stdio::piped())
+            .spawn()?;
+
+        let mut output = String::new();
+        child.stdout.as_mut().unwrap().read_to_string(&mut output)?;
+        let exit_status = child.wait()?;
+
+        if exit_status.success() {
+            if order.capture_output {
+                ret.push(output);
+            }
+        } else {
+            bail!(
+                "Script {:?} exited with error code {exit_status}",
+                order.path
+            );
+        }
+    }
+
+    Ok(ret)
+}
+
+fn insert_outputs(outline: &mut Outline, outputs: &[String]) -> Result<()> {
+    // XXX: Repetitive code between this and write_files
+    for (inside_file, ((head,), Outline(_, body))) in
+        outline.context_iter_mut(false)
+    {
+        let mut output_idx = 0;
+
+        if *inside_file {
+            continue;
+        }
+
+        if filename(&head).is_some() {
+            // Trying to go down a file, stop here.
+            *inside_file = true;
+            continue;
+        }
+
+        for i in 0..body.len() {
+            let head = body[i].0 .0.trim();
+            if let Some(_) = filename(head) {
+                let content = body[i].1.to_string();
+                let capture_output =
+                    i < body.len() - 1 && body[i + 1].0 .0 == OUTPUT_MARKER;
+                let is_executable = content.starts_with("#!");
+
+                // Rewrite output.
+                if is_executable && capture_output {
+                    body[i + 1].1 = idm::from_str(&outputs[output_idx])?;
+                    output_idx += 1;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn filename(head: &str) -> Option<&str> {
+    let head = head.trim();
+    let Some(head) = head.strip_suffix(':') else {
+        return None;
+    };
+
+    // TODO Filename validation could be more robust. Must be a
+    // valid filename that isn't trying to escape containment with
+    // ".." or by starting with '/', but it can include
+    // subdirectory structure.
+    if head.chars().any(|c| c.is_whitespace())
+        || head.contains("..")
+        || head.starts_with('/')
+    {
+        return None;
+    }
+
+    Some(head)
+}
+
+#[derive(Debug)]
 struct RunOrder {
     path: PathBuf,
     capture_output: bool,
