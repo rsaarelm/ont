@@ -107,6 +107,48 @@ impl Outline {
     }
 }
 
+impl fmt::Display for Outline {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn print(
+            f: &mut fmt::Formatter<'_>,
+            depth: usize,
+            outline: &Outline,
+        ) -> fmt::Result {
+            for (k, v) in &outline.0 .0 {
+                for _ in 0..depth {
+                    write!(f, "  ")?;
+                }
+                write!(f, ":{k}")?;
+
+                if v.chars().any(|c| c == '\n') {
+                    // If value is multi-line, write it indented under the key.
+                    writeln!(f)?;
+                    for line in v.lines() {
+                        for _ in 0..(depth + 1) {
+                            write!(f, "  ")?;
+                        }
+                        writeln!(f, "{line}")?;
+                    }
+                } else {
+                    // Otherwise write the value inline.
+                    writeln!(f, " {v}")?;
+                }
+            }
+
+            for ((head,), body) in &outline.1 {
+                for _ in 0..depth {
+                    write!(f, "  ")?;
+                }
+                writeln!(f, "{head}")?;
+                print(f, depth + 1, body)?;
+            }
+            Ok(())
+        }
+
+        print(f, 0, self)
+    }
+}
+
 pub type SimpleSection = ((String,), SimpleOutline);
 
 /// An outline without a separately parsed header section.
