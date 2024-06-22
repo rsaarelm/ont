@@ -30,8 +30,8 @@ impl TryFrom<Section> for Id {
             Ok(Id::Title(title.into()))
         } else if let Some(uri) = attrs.get("uri") {
             // Normalize http/https differences.
-            let uri = if uri.starts_with("http") {
-                format!("https:{}", uri.split(':').nth(1).unwrap())
+            let uri = if uri.starts_with("http:") {
+                format!("https:{}", &uri[5..])
             } else {
                 uri.into()
             };
@@ -64,5 +64,5 @@ fn main() -> Result<()> {
 
 fn wiki_title(headline: &str) -> Option<&str> {
     regex_captures!(r"^([A-Z][a-z]+([A-Z][a-z]+|\d+)+)(.otl)?( \*)?$", headline)
-        .map(|(_, ret, _, _)| ret)
+        .map(|(_, ret, _, _, _)| ret)
 }
