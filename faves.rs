@@ -13,9 +13,10 @@
 //! idm-tools = { git = "https://github.com/rsaarelm/idm-tools", version = "*" }
 //! ```
 
+use std::io::{self, Read};
+
 use anyhow::Result;
 use idm_tools::Outline;
-use std::io::{self, Read};
 
 fn main() -> Result<()> {
     let mut stdin = String::new();
