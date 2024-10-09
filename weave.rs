@@ -28,6 +28,10 @@
 //! sha2 = "0.10"
 //! ```
 
+// TODO: Output from script might not be valid IDM if it indents things
+// weirdly, check for this and change indentations to NBSPs to correct for
+// this
+
 const OUTPUT_MARKER: &str = "==";
 
 const CACHE_SUBDIR: &str = ".idm-weave";
