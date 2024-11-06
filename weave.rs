@@ -208,11 +208,11 @@ fn run_files(orders: &[RunOrder]) -> Result<Vec<String>> {
 
 fn insert_outputs(outline: &mut Outline, outputs: &[String]) -> Result<()> {
     // XXX: Repetitive code between this and write_files
+    let mut output_idx = 0;
+
     for (inside_file, ((head,), Outline(_, body))) in
         outline.context_iter_mut(false)
     {
-        let mut output_idx = 0;
-
         if *inside_file {
             continue;
         }
