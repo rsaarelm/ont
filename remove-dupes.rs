@@ -40,7 +40,7 @@ fn main() -> Result<()> {
         for i in (0..secs.len()).rev() {
             if let Some(uri) = secs[i].1.get::<String>("uri").unwrap() {
                 if existing_uris.contains(&uri) {
-                    secs.swap_remove(i);
+                    secs.remove(i);
                     removes += 1;
                 }
             }
