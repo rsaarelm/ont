@@ -30,7 +30,7 @@ use idm_tools::{Collection, Outline};
 #[derive(Parser)]
 struct Args {
     /// Path to the collection directory, use current directory if not given.
-    #[arg(short = 'f', long)]
+    #[arg(short = 'c', long)]
     collection: Option<PathBuf>,
 
     /// File with tag replacements.
