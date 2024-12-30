@@ -45,12 +45,7 @@ impl From<Bookmark> for Section {
 
         let mut title = b.title.clone();
 
-        // Morph favorite tag.
-        if let Some(pos) = tags.iter().position(|t| t == "*") {
-            tags.remove(pos);
-            title.push_str(" *");
-        }
-
+        // Convert raindrop's favorite flag into our convention.
         if b.favorite && !title.ends_with(" *") {
             title.push_str(" *");
         }
