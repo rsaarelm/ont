@@ -12,11 +12,54 @@ use indexmap::IndexMap;
 use lazy_regex::regex;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub type Section = ((String,), Outline);
-
-/// An outline with a header section.
+/// An element of an outline with a single headline and nested contents.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Outline(pub (IndexMap<String, String>,), pub Vec<Section>);
+#[serde(from = "((String,), Outline)", into = "((String,), Outline)")]
+pub struct Section {
+    /// First line of the section.
+    pub head: String,
+    /// Indented outline block under the section head.
+    pub body: Outline,
+}
+
+impl From<((String,), Outline)> for Section {
+    fn from(((head,), body): ((String,), Outline)) -> Self {
+        Section { head, body }
+    }
+}
+
+impl From<Section> for ((String,), Outline) {
+    fn from(val: Section) -> Self {
+        ((val.head,), val.body)
+    }
+}
+
+/// An outline block with named attributes and child elements.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(
+    from = "((IndexMap<String, String>,), Vec<Section>)",
+    into = "((IndexMap<String, String>,), Vec<Section>)"
+)]
+pub struct Outline {
+    /// Named attributes of the outline.
+    pub attrs: IndexMap<String, String>,
+    /// Contents of the outline.
+    pub children: Vec<Section>,
+}
+
+impl From<((IndexMap<String, String>,), Vec<Section>)> for Outline {
+    fn from(
+        ((attrs,), children): ((IndexMap<String, String>,), Vec<Section>),
+    ) -> Self {
+        Outline { attrs, children }
+    }
+}
+
+impl From<Outline> for ((IndexMap<String, String>,), Vec<Section>) {
+    fn from(val: Outline) -> Self {
+        ((val.attrs,), val.children)
+    }
+}
 
 pub struct ContextIterMut<'a, C> {
     // (context-value, pointer-to-current-item, pointer-past-last-item)
@@ -27,8 +70,8 @@ pub struct ContextIterMut<'a, C> {
 impl<'a, C: Clone> ContextIterMut<'a, C> {
     fn new(outline: &'a mut Outline, init: C) -> Self {
         let stack = vec![unsafe {
-            let a = outline.1.as_mut_ptr();
-            let b = a.add(outline.1.len());
+            let a = outline.children.as_mut_ptr();
+            let b = a.add(outline.children.len());
             (init, a, b)
         }];
         ContextIterMut {
@@ -66,7 +109,7 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
 
         // Safety analysis statement: I dunno lol
         unsafe {
-            let children = &mut (*begin).1 .1;
+            let children = &mut (*begin).body.children;
             self.stack[len - 1].1 = begin.add(1);
             let a = children.as_mut_ptr();
             let b = a.add(children.len());
@@ -95,14 +138,14 @@ impl Outline {
         &'a self,
         name: &str,
     ) -> Result<Option<T>> {
-        let Some(a) = self.0 .0.get(name) else {
+        let Some(a) = self.attrs.get(name) else {
             return Ok(None);
         };
         Ok(Some(idm::from_str(a)?))
     }
 
     pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
-        self.0 .0.insert(name.to_owned(), idm::to_string(value)?);
+        self.attrs.insert(name.to_owned(), idm::to_string(value)?);
         Ok(())
     }
 }
@@ -114,7 +157,7 @@ impl fmt::Display for Outline {
             depth: usize,
             outline: &Outline,
         ) -> fmt::Result {
-            for (k, v) in &outline.0 .0 {
+            for (k, v) in &outline.attrs {
                 for _ in 0..depth {
                     write!(f, "  ")?;
                 }
@@ -135,12 +178,12 @@ impl fmt::Display for Outline {
                 }
             }
 
-            for ((head,), body) in &outline.1 {
+            for section in &outline.children {
                 for _ in 0..depth {
                     write!(f, "  ")?;
                 }
-                writeln!(f, "{head}")?;
-                print(f, depth + 1, body)?;
+                writeln!(f, "{}", section.head)?;
+                print(f, depth + 1, &section.body)?;
             }
             Ok(())
         }
@@ -400,7 +443,7 @@ fn build_files(
     data: &Outline,
 ) -> Result<()> {
     // Attribute block
-    for (key, value) in &data.0 .0 {
+    for (key, value) in &data.attrs {
         if !is_valid_filename(key) {
             bail!("build_files: bad attribute name {key:?}");
         }
@@ -422,32 +465,32 @@ fn build_files(
     }
 
     // Regular contents
-    for ((headline,), data) in &data.1 {
+    for section in &data.children {
         // You get an empty toplevel section when a file ends with an extra
         // newline. Just ignore these.
-        if headline.trim().is_empty() {
+        if section.head.trim().is_empty() {
             continue;
         }
 
-        let name = if headline.ends_with('/') {
-            &headline[0..headline.len() - 1]
+        let name = if section.head.ends_with('/') {
+            &section.head[0..section.head.len() - 1]
         } else {
-            &headline[..]
+            &section.head[..]
         };
         if !is_valid_filename(name) {
-            bail!("build_files: bad headline {headline:?}");
+            bail!("build_files: bad headline {:?}", section.head);
         }
 
-        if headline.ends_with('/') {
+        if section.head.ends_with('/') {
             // Create a subdirectory.
-            build_files(files, &path.as_ref().join(headline), style, data)?;
+            build_files(files, path.as_ref().join(&section.head), style, data)?;
             continue;
         }
 
-        let file_name = if headline.contains('.') {
-            headline.into()
+        let file_name = if section.head.contains('.') {
+            section.head.clone()
         } else {
-            format!("{headline}.idm")
+            format!("{}.idm", section.head)
         };
 
         let path = path.as_ref().join(file_name);
@@ -501,13 +544,9 @@ fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
     fs::remove_file(path)?;
     log::debug!("tidy_delete: Deleted {path:?}");
 
-    loop {
+    while let Some(parent) = path.parent() {
         // Keep going up the subdirectories...
-        if let Some(parent) = path.parent() {
-            path = parent;
-        } else {
-            break;
-        }
+        path = parent;
 
         // ...that are underneath `root`...
         if !path.starts_with(root)
@@ -517,9 +556,11 @@ fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
         }
 
         // ...and deleting them if you can.
-        if let Ok(_) = fs::remove_dir(path) {
+        if fs::remove_dir(path).is_ok() {
             log::debug!("tidy_delete: Deleted empty subdirectory {path:?}");
         } else {
+            // We couldn't delete the directory, assume it wasn't empty and
+            // that there's no point going further up the tree.
             break;
         }
     }
