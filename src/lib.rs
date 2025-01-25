@@ -22,6 +22,15 @@ pub struct Section {
     pub body: Outline,
 }
 
+impl Section {
+    pub fn new(head: impl Into<String>, body: Outline) -> Self {
+        Section {
+            head: head.into(),
+            body,
+        }
+    }
+}
+
 impl From<((String,), Outline)> for Section {
     fn from(((head,), body): ((String,), Outline)) -> Self {
         Section { head, body }
@@ -45,6 +54,15 @@ pub struct Outline {
     pub attrs: IndexMap<String, String>,
     /// Contents of the outline.
     pub children: Vec<Section>,
+}
+
+impl Outline {
+    pub fn new(
+        attrs: IndexMap<String, String>,
+        children: Vec<Section>,
+    ) -> Self {
+        Outline { attrs, children }
+    }
 }
 
 impl From<((IndexMap<String, String>,), Vec<Section>)> for Outline {
