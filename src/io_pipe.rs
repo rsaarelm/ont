@@ -99,9 +99,8 @@ impl TryFrom<IoArgs> for IoPipe {
             std::io::stdin().read_to_string(&mut input)?;
             Source::Stdin(input)
         } else if value.input.is_dir() {
-            let (outline, style) = idm_tools::read_directory(&value.input)?;
-            // TODO get files
-            let files = Default::default();
+            let (outline, style, files) =
+                idm_tools::read_directory(&value.input)?;
             Source::Collection {
                 path: value.input.clone(),
                 files,

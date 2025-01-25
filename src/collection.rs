@@ -13,9 +13,10 @@ use crate::{Outline, SimpleOutline};
 
 pub fn read_directory(
     path: impl AsRef<Path>,
-) -> Result<(Outline, Indentation)> {
+) -> Result<(Outline, Indentation, BTreeSet<PathBuf>)> {
     fn read(
         output: &mut String,
+        paths: &mut BTreeSet<PathBuf>,
         style: &mut Option<Indentation>,
         prefix: &str,
         path: impl AsRef<Path>,
@@ -79,8 +80,10 @@ pub fn read_directory(
             if path.is_dir() {
                 writeln!(output, "{prefix}{head}")?;
                 // Recurse into subdirectory.
-                read(output, style, &format!("{prefix}  "), path)?;
+                read(output, paths, style, &format!("{prefix}  "), path)?;
             } else if path.is_file() {
+                paths.insert(path.clone());
+
                 // Read and insert file contents.
                 let text = fs::read_to_string(&path)?;
 
@@ -141,10 +144,11 @@ pub fn read_directory(
 
     let mut buf = String::new();
     let mut style = None;
+    let mut paths = BTreeSet::default();
 
-    read(&mut buf, &mut style, "", path)?;
+    read(&mut buf, &mut paths, &mut style, "", path)?;
 
-    Ok((idm::from_str(&buf)?, style.unwrap_or_default()))
+    Ok((idm::from_str(&buf)?, style.unwrap_or_default(), paths))
 }
 
 pub fn write_directory(
