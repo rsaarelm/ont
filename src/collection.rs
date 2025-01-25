@@ -231,7 +231,7 @@ fn build_files(
         };
 
         let path = path.as_ref().join(file_name);
-        files.insert(path, idm::to_string_styled(style, data)?);
+        files.insert(path, idm::to_string_styled(style, &section.body)?);
     }
     Ok(())
 }
