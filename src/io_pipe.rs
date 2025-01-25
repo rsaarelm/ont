@@ -95,7 +95,7 @@ impl TryFrom<IoArgs> for IoPipe {
 
     fn try_from(value: IoArgs) -> Result<Self> {
         if value.in_place && value.input.to_str() == Some("-") {
-            anyhow::bail!("Cannot use -i with stdin input");
+            anyhow::bail!("Cannot use -i with standard input");
         }
 
         let source = if value.input.to_str() == Some("-") {
@@ -108,7 +108,7 @@ impl TryFrom<IoArgs> for IoPipe {
         } else if value.input.is_file() {
             let content = std::fs::read_to_string(&value.input)?;
             Source::File {
-                path: value.input,
+                path: value.input.clone(),
                 content,
             }
         } else {
@@ -116,6 +116,10 @@ impl TryFrom<IoArgs> for IoPipe {
         };
 
         let dest = match &value.output {
+            None if value.in_place => value.input,
+            Some(_) if value.in_place => {
+                bail!("Cannot use -i with output file");
+            }
             None => PathBuf::from("-"),
             Some(x) => x.clone(),
         };
