@@ -25,7 +25,7 @@ pub fn run(io: IoPipe) -> Result<()> {
     let mut columns = Outline::default();
 
     for field in &fields {
-        let mut elt = Section::new(format!(":{}", field), Outline::default());
+        let mut elt = Section::new(field.to_string(), Outline::default());
         for sec in &outline.children {
             let attrs = &sec.body.attrs;
 
