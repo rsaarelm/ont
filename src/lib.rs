@@ -330,21 +330,21 @@ fn read_directory(
 
         if path.is_dir() {
             if outline_mode {
-                elts.push((format!("{file_name}/"), path.into()));
+                elts.push((format!("{file_name}/"), path));
             } else {
-                elts.push((file_name.into(), path.into()));
+                elts.push((file_name.into(), path));
             }
         } else if path.is_file() {
             match path.extension().map(|a| a.to_string_lossy()) {
                 Some(e) if e == "idm" => {
                     elts.push((
                         file_name[..file_name.len() - 4].into(),
-                        path.into(),
+                        path,
                     ));
                 }
                 Some(_) => {
                     // Push other extensions in as-is.
-                    elts.push((file_name.into(), path.into()));
+                    elts.push((file_name.into(), path));
                 }
                 None => {
                     // If they don't, output would assume they had .idm
@@ -416,7 +416,7 @@ fn read_directory(
                     }
                 }
 
-                let mut ln = &line[..];
+                let mut ln = line;
                 // Turn tab indentation into spaces.
                 while ln.starts_with('\t') {
                     write!(output, "  ")?;
