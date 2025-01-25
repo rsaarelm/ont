@@ -21,13 +21,8 @@ impl IoPipe {
             Source::Stdin(ref content) => Ok(content.clone()),
             Source::File { ref content, .. } => Ok(content.clone()),
             Source::Collection {
-                ref outline,
-                style: Some(s),
-                ..
-            } => Ok(idm::to_string_styled(s, outline)?),
-            Source::Collection { ref outline, .. } => {
-                Ok(idm::to_string(outline)?)
-            }
+                ref outline, style, ..
+            } => Ok(idm::to_string_styled(style, outline)?),
         }
     }
 
@@ -73,7 +68,7 @@ impl IoPipe {
 
     fn style(&self) -> Indentation {
         match &self.source {
-            Source::Collection { style, .. } => style.unwrap_or_default(),
+            Source::Collection { style, .. } => *style,
             Source::Stdin(content) | Source::File { content, .. } => {
                 Indentation::infer(content).unwrap_or_default()
             }
@@ -104,7 +99,15 @@ impl TryFrom<IoArgs> for IoPipe {
             std::io::stdin().read_to_string(&mut input)?;
             Source::Stdin(input)
         } else if value.input.is_dir() {
-            todo!("Read collection");
+            let (outline, style) = idm_tools::read_directory(&value.input)?;
+            // TODO get files
+            let files = Default::default();
+            Source::Collection {
+                path: value.input.clone(),
+                files,
+                style,
+                outline,
+            }
         } else if value.input.is_file() {
             let content = std::fs::read_to_string(&value.input)?;
             Source::File {
@@ -137,7 +140,7 @@ enum Source {
     Collection {
         path: PathBuf,
         files: BTreeSet<PathBuf>,
-        style: Option<Indentation>,
+        style: Indentation,
         outline: Outline,
     },
 }

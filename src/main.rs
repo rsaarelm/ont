@@ -1,6 +1,6 @@
-use std::{io::Read, path::PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 mod io_pipe;
@@ -48,7 +48,6 @@ enum Commands {
     },
 }
 
-use idm_tools::{Collection, Outline};
 use Commands::*;
 
 fn main() -> Result<()> {
