@@ -48,15 +48,34 @@ fn main() -> Result<()> {
 
     let mut seen: BTreeSet<Id> = BTreeSet::default();
 
+    let mut dupes = BTreeSet::default();
+
     // TODO: Have non-mut iter in collection too.
     for s in collection.iter_mut() {
         let Ok(id) = Id::try_from(s.clone()) else {
             continue;
         };
         if seen.contains(&id) {
-            println!("{id:?}");
+            dupes.insert(id.clone());
         }
         seen.insert(id);
+
+        // Some bookmarks can be a sequence of URLs, when we encounter one of
+        // those, add the rest into the seen set so we can be on the lookout
+        // for those showing up individually elsewhere.
+        if let Ok(Some(seq)) = s.1.get::<Vec<String>>("sequence") {
+            for uri in seq {
+                let id = Id::Uri(uri.to_string());
+                if seen.contains(&id) {
+                    dupes.insert(id.clone());
+                }
+                seen.insert(id);
+            }
+        }
+    }
+
+    for dupe in dupes {
+        println!("{dupe:?}");
     }
 
     Ok(())
