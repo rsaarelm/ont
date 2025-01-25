@@ -14,6 +14,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// An element of an outline with a single headline and nested contents.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+// Serialize using a special form that triggers IDM's raw mode.
 #[serde(from = "((String,), Outline)", into = "((String,), Outline)")]
 pub struct Section {
     /// First line of the section.
@@ -45,6 +46,7 @@ impl From<Section> for ((String,), Outline) {
 
 /// An outline block with named attributes and child elements.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+// Serialize using a special form that triggers IDM's raw mode.
 #[serde(
     from = "((IndexMap<String, String>,), Vec<Section>)",
     into = "((IndexMap<String, String>,), Vec<Section>)"
@@ -337,10 +339,7 @@ fn read_directory(
         } else if path.is_file() {
             match path.extension().map(|a| a.to_string_lossy()) {
                 Some(e) if e == "idm" => {
-                    elts.push((
-                        file_name[..file_name.len() - 4].into(),
-                        path,
-                    ));
+                    elts.push((file_name[..file_name.len() - 4].into(), path));
                 }
                 Some(_) => {
                     // Push other extensions in as-is.
@@ -517,7 +516,7 @@ fn build_files(
     Ok(())
 }
 
-fn write_directory(
+pub fn write_directory(
     path: impl AsRef<Path>,
     style: Indentation,
     data: &Outline,
@@ -558,7 +557,7 @@ fn is_valid_filename(s: impl AsRef<str>) -> bool {
 ///
 /// This is a git-style file delete that deletes the containing subdirectory
 /// if it's emptied of files.
-fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
+pub fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
     fs::remove_file(path)?;
     log::debug!("tidy_delete: Deleted {path:?}");
 

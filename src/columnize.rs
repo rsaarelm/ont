@@ -2,10 +2,10 @@ use anyhow::Result;
 use idm_tools::{Outline, Section};
 use indexmap::IndexSet;
 
-use crate::IoArgs;
+use crate::IoPipe;
 
-pub fn run(io: IoArgs) -> Result<()> {
-    let outline: Outline = idm::from_str(&io.read()?)?;
+pub fn run(io: IoPipe) -> Result<()> {
+    let outline: Outline = io.read_outline()?;
 
     // Construct the complete set of fields from the attribute fields in all
     // the toplevel items of the outline.
@@ -45,7 +45,7 @@ pub fn run(io: IoArgs) -> Result<()> {
         columns.children.push(elt);
     }
 
-    io.write(&format!("{columns}"))?;
+    io.write(&columns)?;
 
     Ok(())
 }

@@ -3,6 +3,9 @@ use std::{io::Read, path::PathBuf};
 use anyhow::{bail, Result};
 use clap::{Args, Parser, Subcommand};
 
+mod io_pipe;
+use io_pipe::IoPipe;
+
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -17,7 +20,7 @@ enum Commands {
 
     /// Parse input into IDM and echo it back, use to find unparseable input
     /// or irregularities that don't survive a roundtrip.
-    Echo(IoArgs),
+    Cat(IoArgs),
 
     /// Find duplicate elements in a collection.
     FindDupes {
@@ -52,8 +55,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Columnize(args) => columnize::run(args),
-        Echo(args) => todo!(),
+        Columnize(args) => columnize::run(args.try_into()?),
+        Cat(args) => todo!(),
         FindDupes { collection_path } => todo!(),
         Glob {
             collection_path,
@@ -87,58 +90,8 @@ pub struct IoArgs {
     /// Output file path, defaults to stdout.
     #[arg(short, long)]
     output: Option<PathBuf>,
-}
-
-// Okay, this gets into hairy weird hack territory.
-//
-// input can be stdin, file (file path) or collection (directory path).
-// All can be read into a string or an outline value.
-// Only a collection can be read into a collection value.
-// (Or maybe not, the others could be synthesized into a collection...?)
-
-impl IoArgs {
-    pub fn validate(&self) -> Result<()> {
-        if self.in_place && self.input.to_str() == Some("-") {
-            anyhow::bail!("Cannot use -i with stdin input");
-        }
-        Ok(())
-    }
-
-    pub fn read(&self) -> Result<String> {
-        let mut input = String::new();
-        if self.input.to_str() == Some("-") {
-            std::io::stdin().read_to_string(&mut input)?;
-            Ok(input)
-        } else {
-            Ok(std::fs::read_to_string(&self.input)?)
-        }
-    }
-
-    pub fn is_collection(&self) -> bool {
-        self.input.to_str() != Some("-") && self.input.is_dir()
-    }
-
-    /// If the input path is a directory, read a collection from it.
-    pub fn as_collection(&self) -> Result<Collection<Outline>> {
-        if self.is_collection() {
-            Collection::load(&self.input)
-        } else {
-            bail!("Input is not a directory");
-        }
-    }
-
-    pub fn write(&self, output: &str) -> Result<()> {
-        match &self.output {
-            None => {
-                print!("{output}");
-            }
-            Some(x) if x.to_str() == Some("-") => {
-                print!("{output}");
-            }
-            Some(ref outfile) => {
-                std::fs::write(outfile, output)?;
-            }
-        }
-        Ok(())
-    }
+    // XXX Using Option here instead of just setting it to default to "-" so
+    // that we can differentiate between the user explicitly asking for stdout
+    // output or just writing minimal calls that might blast a whole
+    // collection to stdout. Haven't bothered to implement that yet though.
 }
