@@ -45,7 +45,5 @@ pub fn run(io: IoPipe) -> Result<()> {
         columns.children.push(elt);
     }
 
-    io.write(&columns)?;
-
-    Ok(())
+    io.write(&columns)
 }

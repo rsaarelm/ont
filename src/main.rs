@@ -28,16 +28,6 @@ enum Commands {
         collection_path: PathBuf,
     },
 
-    /// Flatten a collection into a single outline.
-    Glob {
-        /// Path to the collection.
-        collection_path: PathBuf,
-
-        /// Output file path, defaults to stdout.
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
-
     /// Filter items that already exist in the collection out of the input.
     RemoveExisting {
         /// Path to the collection.
@@ -55,7 +45,10 @@ fn main() -> Result<()> {
 
     match cli.command {
         Columnize(args) => columnize::run(args.try_into()?),
-        Cat(args) => todo!(),
+        Cat(args) => {
+            let io = IoPipe::try_from(args)?;
+            io.write(&io.read_outline()?)
+        }
         FindDupes { collection_path } => todo!(),
         Glob {
             collection_path,
