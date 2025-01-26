@@ -57,6 +57,23 @@ impl Outline {
     ) -> Self {
         Outline { attrs, children }
     }
+
+    pub fn uris(&self) -> Result<Vec<String>> {
+        let mut ret = Vec::new();
+
+        if let Some(uri) = self.attrs.get("uri") {
+            ret.push(uri.clone());
+        } else {
+            // Must have the initial uri or it doesn't count.
+            return Ok(ret);
+        }
+
+        if let Some(seq) = self.get::<Vec<String>>("sequence")? {
+            ret.extend(seq);
+        }
+
+        Ok(ret)
+    }
 }
 
 impl From<((IndexMap<String, String>,), Vec<Section>)> for Outline {

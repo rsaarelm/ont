@@ -1,12 +1,38 @@
 use std::{fs, path::Path};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 mod collection;
 pub use collection::{read_directory, write_directory};
 
 mod outline;
+use idm::ser::Indentation;
 pub use outline::{Outline, Section, SimpleOutline, SimpleSection};
+
+pub fn read_outline(path: impl AsRef<Path>) -> Result<(Outline, Indentation)> {
+    use std::io::Read;
+
+    let path = path.as_ref();
+
+    if path.to_str() == Some("-") {
+        // Read stdin to string.
+        let mut content = String::new();
+        std::io::stdin().read_to_string(&mut content)?;
+        let style = Indentation::infer(&content).unwrap_or_default();
+        Ok((idm::from_str(&content)?, style))
+    } else if path.is_file() {
+        // Read file.
+        let content = std::fs::read_to_string(path)?;
+        let style = Indentation::infer(&content).unwrap_or_default();
+        Ok((idm::from_str(&content)?, style))
+    } else if path.is_dir() {
+        // Read collection directory.
+        let (outline, style, _) = read_directory(path)?;
+        Ok((outline, style))
+    } else {
+        bail!("read_outline: invalid path {path:?}");
+    }
+}
 
 /// Delete file at `path` and any empty subdirectories between `root` and
 /// `path`.

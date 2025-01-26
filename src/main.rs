@@ -38,6 +38,15 @@ enum Commands {
         #[command(flatten)]
         io: IoArgs,
     },
+
+    /// Filter out items with URIs that exist in collection from the input.
+    FilterExisting {
+        /// Path to existing collection input will be compared against.
+        collection: PathBuf,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 }
 
 use Commands::*;
@@ -57,10 +66,15 @@ fn main() -> Result<()> {
             separate_favorites,
             io,
         } => sort_by::run(io.try_into()?, sort_field, separate_favorites),
+
+        FilterExisting { collection, io } => {
+            filter_existing::run(collection, io.try_into()?)
+        }
     }
 }
 
 mod columnize;
+mod filter_existing;
 mod find_dupes;
 mod sort_by;
 
