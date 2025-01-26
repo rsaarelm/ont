@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, fmt};
+use std::{collections::BTreeMap, fmt};
 
 use anyhow::{bail, Result};
 use idm_tools::{Outline, Section};
@@ -44,7 +44,6 @@ pub fn run(io: IoPipe) -> Result<()> {
     print!("{list}");
 
     Ok(())
-
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

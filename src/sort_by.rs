@@ -1,13 +1,19 @@
 use std::cmp::Ordering;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use idm_tools::{Outline, Section};
 
 use crate::IoPipe;
 
-pub fn run(io: IoPipe, sort_field: String, separate_favorites: bool) -> Result<()> {
+pub fn run(
+    io: IoPipe,
+    sort_field: String,
+    separate_favorites: bool,
+) -> Result<()> {
     let mut outline: Outline = io.read_outline()?;
-    outline.children.sort_by(|a, b| ord(separate_favorites, &sort_field, a, b));
+    outline
+        .children
+        .sort_by(|a, b| ord(separate_favorites, &sort_field, a, b));
     io.write(&outline)
 }
 

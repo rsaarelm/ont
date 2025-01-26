@@ -52,9 +52,11 @@ fn main() -> Result<()> {
             io.write(&io.read_outline()?)
         }
         FindDupes(args) => find_dupes::run(args.try_into()?),
-        SortBy { sort_field, separate_favorites, io } => {
-            sort_by::run(io.try_into()?, sort_field, separate_favorites)
-        }
+        SortBy {
+            sort_field,
+            separate_favorites,
+            io,
+        } => sort_by::run(io.try_into()?, sort_field, separate_favorites),
     }
 }
 
