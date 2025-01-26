@@ -37,7 +37,7 @@ impl IoPipe {
 
     pub fn write(&self, output: &Outline) -> Result<()> {
         if self.dest.to_str() == Some("-") {
-            print!("{output}");
+            print!("{}", idm::to_string_styled(self.style(), output)?);
         } else if self.dest.is_dir() {
             let files_written =
                 idm_tools::write_directory(&self.dest, self.style(), output)?;
@@ -53,7 +53,10 @@ impl IoPipe {
                 }
             }
         } else {
-            std::fs::write(&self.dest, format!("{output}"))?;
+            std::fs::write(
+                &self.dest,
+                idm::to_string_styled(self.style(), output)?,
+            )?;
         }
         Ok(())
     }
