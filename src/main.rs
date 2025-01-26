@@ -50,10 +50,6 @@ fn main() -> Result<()> {
             io.write(&io.read_outline()?)
         }
         FindDupes { collection_path } => todo!(),
-        Glob {
-            collection_path,
-            output,
-        } => todo!(),
         RemoveExisting {
             collection_path,
             io,
