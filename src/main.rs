@@ -23,15 +23,17 @@ enum Commands {
     Cat(IoArgs),
 
     /// Find duplicate elements in a collection.
-    FindDupes {
-        /// Path to the collection.
-        collection_path: PathBuf,
-    },
+    FindDupes(IoArgs),
 
     /// Filter items that already exist in the collection out of the input.
-    RemoveExisting {
-        /// Path to the collection.
-        collection_path: PathBuf,
+    SortBy {
+        /// Field to sort lexically by.
+        #[arg(long, default_value = "date")]
+        sort_field: String,
+
+        /// Bubble favorited items (marked with trailing ` *`) to top of list.
+        #[arg(short = 'f', long, default_value = "false")]
+        separate_favorites: bool,
 
         #[command(flatten)]
         io: IoArgs,
@@ -49,15 +51,16 @@ fn main() -> Result<()> {
             let io = IoPipe::try_from(args)?;
             io.write(&io.read_outline()?)
         }
-        FindDupes { collection_path } => todo!(),
-        RemoveExisting {
-            collection_path,
-            io,
-        } => todo!(),
+        FindDupes(args) => find_dupes::run(args.try_into()?),
+        SortBy { sort_field, separate_favorites, io } => {
+            sort_by::run(io.try_into()?, sort_field, separate_favorites)
+        }
     }
 }
 
 mod columnize;
+mod find_dupes;
+mod sort_by;
 
 /// Standard input/output specification for subcommands.
 ///
