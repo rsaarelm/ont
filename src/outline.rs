@@ -91,18 +91,14 @@ impl From<Outline> for ((IndexMap<String, String>,), Vec<Section>) {
 }
 
 pub struct ContextIterMut<'a, C> {
-    // (context-value, pointer-to-current-item, pointer-past-last-item)
-    stack: Vec<(C, *mut Section, *mut Section)>,
+    // (context-value, pointer-to-outline, current-item)
+    stack: Vec<(C, *mut Outline, usize)>,
     phantom: std::marker::PhantomData<&'a Section>,
 }
 
 impl<'a, C: Clone> ContextIterMut<'a, C> {
     fn new(outline: &'a mut Outline, init: C) -> Self {
-        let stack = vec![unsafe {
-            let a = outline.children.as_mut_ptr();
-            let b = a.add(outline.children.len());
-            (init, a, b)
-        }];
+        let stack = vec![(init, outline as *mut Outline, 0)];
         ContextIterMut {
             stack,
             phantom: std::marker::PhantomData,
@@ -116,8 +112,8 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
     fn next(&mut self) -> Option<Self::Item> {
         // Remove completed ranges.
         while !self.stack.is_empty() {
-            let (_, begin, end) = self.stack[self.stack.len() - 1];
-            if begin == end {
+            let (_, outline, i) = self.stack[self.stack.len() - 1];
+            if i >= unsafe { (*outline).children.len() } {
                 self.stack.pop();
             } else {
                 break;
@@ -130,22 +126,29 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
         }
 
         let len = self.stack.len();
-        // Clone current context object. The clone is pushed for next stack
+
+        // Clone current context object. The clone is pushed to next stack
         // layer and passed as mutable pointer to the iterating context.
         // Context changes will show up in children.
         let ctx = self.stack[len - 1].0.clone();
-        let begin = self.stack[len - 1].1;
 
-        // Safety analysis statement: I dunno lol
+        // Get index of next item to yield and increment index value on stack.
+        let idx = self.stack[len - 1].2;
+        self.stack[len - 1].2 += 1;
+
         unsafe {
-            let children = &mut (*begin).body.children;
-            self.stack[len - 1].1 = begin.add(1);
-            let a = children.as_mut_ptr();
-            let b = a.add(children.len());
-            self.stack.push((ctx, a, b));
+            let current_item = &mut (*self.stack[len - 1].1).children[idx];
+
+            // Add children of current item to stack.
+            self.stack
+                .push((ctx, &mut current_item.body as *mut Outline, 0));
+
+            // Take a mutable pointer to the new context object passed to the
+            // child range and yield it along with current item. "len" is now
+            // a valid index since we have pushed a new item to the stack.
             let ctx = &mut self.stack[len].0 as *mut C;
 
-            Some((&mut *ctx, &mut *begin))
+            Some((&mut *ctx, current_item))
         }
     }
 }
