@@ -53,21 +53,9 @@ pub fn read_directory(
                             path,
                         ));
                     }
-                    Some(_) => {
-                        // Push other extensions in as-is.
-                        elts.push((file_name.into(), path));
-                    }
-                    None => {
-                        // XXX: Should there be some convention here of
-                        // outputting something ugly like
-                        // `Makefile.$NOEXTENSION$` that can then be rolled
-                        // back when writing out the stuff again? Or just put
-                        // out a trailing dot?
-
-                        // Extensionless files aren't allowed since they
-                        // wouldn't be distinguishable from .idm extension
-                        // files.
-                        eprintln!("read_directory: Skipping extensionless file {file_name:?}");
+                    _ => {
+                        // Push other file names as is and append a colon.
+                        elts.push((format!("{file_name}:"), path));
                     }
                 }
             } else {
@@ -228,26 +216,28 @@ fn build_files(
             continue;
         }
 
-        let name = if section.head.ends_with('/') {
-            &section.head[0..section.head.len() - 1]
+        let mut is_directory = false;
+
+        let file_name = if let Some(name) = section.head.strip_suffix('/') {
+            is_directory = true;
+            name.to_owned()
+        } else if let Some(name) = section.head.strip_suffix(':') {
+            // File name ends in colon, it's some random non-IDM file.
+            name.to_owned()
         } else {
-            &section.head[..]
+            // Implicit filename, assume an .idm extension.
+            format!("{}.idm", section.head)
         };
-        if !is_valid_filename(name) {
+
+        if !is_valid_filename(&file_name) {
             bail!("build_files: bad headline {:?}", section.head);
         }
 
-        if section.head.ends_with('/') {
+        if is_directory {
             // Create a subdirectory.
             build_files(files, path.as_ref().join(&section.head), style, data)?;
             continue;
         }
-
-        let file_name = if section.head.contains('.') {
-            section.head.clone()
-        } else {
-            format!("{}.idm", section.head)
-        };
 
         let path = path.as_ref().join(file_name);
         files.insert(path, idm::to_string_styled(style, &section.body)?);
