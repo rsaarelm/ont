@@ -47,11 +47,23 @@ enum Commands {
         #[command(flatten)]
         io: IoArgs,
     },
+
+    /// Weave outputs of embedded scripts into file.
+    Weave {
+        /// Ignore cache annotations and re-run all scripts.
+        #[arg(long)]
+        force: bool,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 }
 
 use Commands::*;
 
 fn main() -> Result<()> {
+    env_logger::init();
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -70,6 +82,8 @@ fn main() -> Result<()> {
         FilterExisting { collection, io } => {
             filter_existing::run(collection, io.try_into()?)
         }
+
+        Weave { force, io } => weave::run(force, io.try_into()?),
     }
 }
 
@@ -77,6 +91,7 @@ mod columnize;
 mod filter_existing;
 mod find_dupes;
 mod sort_by;
+mod weave;
 
 /// Standard input/output specification for subcommands.
 ///

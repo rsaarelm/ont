@@ -11,10 +11,14 @@ resolver = "2"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22.1"
 clap = { version = "4", features = ["derive"] }
-derive_more = { version = "1", features = ["deref", "deref_mut"] }
+derive_more = { version = "2", features = ["deref", "deref_mut"] }
+env_logger = "0.11"
 idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 lazy-regex = "3"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tempfile = "3"
