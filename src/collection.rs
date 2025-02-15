@@ -58,10 +58,16 @@ pub fn read_directory(
                         elts.push((file_name.into(), path));
                     }
                     None => {
+                        // XXX: Should there be some convention here of
+                        // outputting something ugly like
+                        // `Makefile.$NOEXTENSION$` that can then be rolled
+                        // back when writing out the stuff again? Or just put
+                        // out a trailing dot?
+
                         // Extensionless files aren't allowed since they
                         // wouldn't be distinguishable from .idm extension
                         // files.
-                        bail!("read_directory: file {file_name:?} must have an extension");
+                        eprintln!("read_directory: Skipping extensionless file {file_name:?}");
                     }
                 }
             } else {
@@ -85,7 +91,20 @@ pub fn read_directory(
                 paths.insert(path.clone());
 
                 // Read and insert file contents.
-                let text = fs::read_to_string(&path)?;
+                let Ok(text) = fs::read_to_string(&path) else {
+                    eprintln!(
+                        "read_directory: Skipping non-UTF-8 file {path:?}"
+                    );
+                    continue;
+                };
+
+                // Check that the contents can be IDM-ed in principle.
+                if idm::from_str::<Outline>(&text).is_err() {
+                    eprintln!(
+                        "read_directory: Skipping non-IDM-able file {path:?}"
+                    );
+                    continue;
+                }
 
                 // It's a single line, just put it right after the headword.
                 // This is why file names can't have spaces.
