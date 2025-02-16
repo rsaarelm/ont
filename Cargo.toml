@@ -19,6 +19,7 @@ idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 lazy-regex = "3"
 log = "0.4"
+nom = "8"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3"

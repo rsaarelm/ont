@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, fmt};
 
 use anyhow::{bail, Result};
 use idm_tools::{Outline, Section};
-use lazy_regex::regex_captures;
 
 use crate::IoPipe;
 
@@ -65,7 +64,7 @@ impl TryFrom<Section> for Id {
     type Error = anyhow::Error;
 
     fn try_from(section: Section) -> Result<Self> {
-        if let Some(title) = wiki_title(&section.head) {
+        if let Some(title) = section.wiki_title() {
             Ok(Id::Title(title.into()))
         } else if let Some(uri) = section.body.attrs.get("uri") {
             // Normalize http/https differences.
@@ -78,10 +77,4 @@ impl TryFrom<Section> for Id {
             bail!("not an object")
         }
     }
-}
-
-// TODO: Write parsing tools in the main crate and use them instead of this.
-fn wiki_title(headline: &str) -> Option<&str> {
-    regex_captures!(r"^([A-Z][a-z]+([A-Z][a-z]+|\d+)+)(.otl)?( \*)?$", headline)
-        .map(|(_, ret, _, _, _)| ret)
 }

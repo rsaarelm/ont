@@ -4,6 +4,8 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use crate::parse;
+
 /// An element of an outline with a single headline and nested contents.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 // Serialize using a special form that triggers IDM's raw mode.
@@ -21,6 +23,15 @@ impl Section {
             head: head.into(),
             body,
         }
+    }
+
+    pub fn is_important(&self) -> bool {
+        self.head.ends_with(" *")
+    }
+
+    pub fn wiki_title(&self) -> Option<&str> {
+        let head = parse::important(&self.head).unwrap_or(&self.head);
+        parse::wiki_word(head)
     }
 }
 
@@ -56,6 +67,33 @@ impl Outline {
         children: Vec<Section>,
     ) -> Self {
         Outline { attrs, children }
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Section> {
+        self.context_iter_mut(()).map(|x| x.1)
+    }
+
+    pub fn context_iter_mut<C: Clone>(
+        &mut self,
+        init: C,
+    ) -> ContextIterMut<'_, C> {
+        ContextIterMut::new(self, init)
+    }
+
+    /// Get an attribute value deserialized to type.
+    pub fn get<'a, T: Deserialize<'a>>(
+        &'a self,
+        name: &str,
+    ) -> Result<Option<T>> {
+        let Some(a) = self.attrs.get(name) else {
+            return Ok(None);
+        };
+        Ok(Some(idm::from_str(a)?))
+    }
+
+    pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
+        self.attrs.insert(name.to_owned(), idm::to_string(value)?);
+        Ok(())
     }
 
     pub fn uris(&self) -> Result<Vec<String>> {
@@ -150,35 +188,6 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
 
             Some((&mut *ctx, current_item))
         }
-    }
-}
-
-impl Outline {
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Section> {
-        self.context_iter_mut(()).map(|x| x.1)
-    }
-
-    pub fn context_iter_mut<C: Clone>(
-        &mut self,
-        init: C,
-    ) -> ContextIterMut<'_, C> {
-        ContextIterMut::new(self, init)
-    }
-
-    /// Get an attribute value deserialized to type.
-    pub fn get<'a, T: Deserialize<'a>>(
-        &'a self,
-        name: &str,
-    ) -> Result<Option<T>> {
-        let Some(a) = self.attrs.get(name) else {
-            return Ok(None);
-        };
-        Ok(Some(idm::from_str(a)?))
-    }
-
-    pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
-        self.attrs.insert(name.to_owned(), idm::to_string(value)?);
-        Ok(())
     }
 }
 

@@ -5,6 +5,8 @@ use anyhow::{bail, Result};
 mod collection;
 pub use collection::{read_directory, write_directory};
 
+pub mod parse;
+
 mod outline;
 use idm::ser::Indentation;
 pub use outline::{Outline, Section, SimpleOutline, SimpleSection};
