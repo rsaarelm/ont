@@ -35,6 +35,17 @@ impl IoPipe {
         }
     }
 
+    pub fn write_text(&self, output: impl AsRef<str>) -> Result<()> {
+        if self.dest.to_str() == Some("-") {
+            print!("{}", output.as_ref());
+        } else if self.dest.is_dir() {
+            bail!("Cannot write text to a directory");
+        } else {
+            std::fs::write(&self.dest, output.as_ref())?;
+        }
+        Ok(())
+    }
+
     pub fn write(&self, output: &Outline) -> Result<()> {
         if self.dest.to_str() == Some("-") {
             print!("{}", idm::to_string_styled(self.style(), output)?);

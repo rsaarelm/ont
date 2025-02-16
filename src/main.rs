@@ -77,6 +77,21 @@ enum Commands {
 
     /// Import bookmarks from Raindrop.io's CSV export.
     ImportRaindrop(IoArgs),
+
+    /// Rewrite tags in a collection based on a replacement list.
+    ReplaceTags {
+        /// Tag replacement list, a file with lines with format `old1-tag
+        /// new1-tag` or `old2-tag  new2-tag new3-tag ...`. The old tags will
+        /// be removed and all the new tags will be added. Lines with just a
+        /// single tag name in the replacements file do nothing.
+        replacements: PathBuf,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
+
+    /// List all tags in a collection.
+    ListTags(IoArgs),
 }
 
 use Commands::*;
@@ -119,6 +134,31 @@ fn main() -> Result<()> {
         }
 
         ImportRaindrop(args) => raindrop::run(args.try_into()?),
+
+        ReplaceTags { replacements, io } => {
+            replace_tags::run(replacements, io.try_into()?)
+        }
+
+        ListTags(args) => {
+            use std::{collections::BTreeSet, fmt::Write};
+
+            let io = IoPipe::try_from(args)?;
+            let mut outline = io.read_outline()?;
+            let tags: BTreeSet<String> = outline
+                .iter_mut()
+                .flat_map(|s| {
+                    s.body
+                        .get::<Vec<String>>("tags")
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                })
+                .collect();
+            let mut out = String::new();
+            for tag in tags {
+                writeln!(out, "{}", tag)?;
+            }
+            io.write_text(&out)
+        }
     }
 }
 
@@ -126,6 +166,7 @@ mod columnize;
 mod filter_existing;
 mod find_dupes;
 mod raindrop;
+mod replace_tags;
 mod sort_by;
 mod tagged;
 mod weave;
