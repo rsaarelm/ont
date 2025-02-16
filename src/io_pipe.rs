@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, io::Read, path::PathBuf};
 
 use anyhow::{bail, Result};
 use idm::ser::Indentation;
-use idm_tools::Outline;
+use idm_tools::{parse, Outline};
 
 use crate::IoArgs;
 
@@ -13,6 +13,10 @@ use crate::IoArgs;
 pub struct IoPipe {
     source: Source,
     dest: PathBuf,
+
+    /// Indentation prefix to remove/add when piping fragments from the middle
+    /// of a file.
+    stdin_prefix: String,
 }
 
 impl IoPipe {
@@ -29,8 +33,24 @@ impl IoPipe {
     pub fn read_outline(&self) -> Result<Outline> {
         match self.source {
             Source::Collection { ref outline, .. } => Ok(outline.clone()),
-            Source::File { ref content, .. } | Source::Stdin(ref content) => {
-                Ok(idm::from_str(content)?)
+            Source::File { ref content, .. } => Ok(idm::from_str(content)?),
+            Source::Stdin(ref content) => {
+                if self.stdin_prefix.is_empty() {
+                    Ok(idm::from_str(content)?)
+                } else {
+                    let mut stripped = String::new();
+                    for line in content.lines() {
+                        let Some(line) = line.strip_prefix(&self.stdin_prefix)
+                        else {
+                            // We can hit this if the input is mixing tabs and
+                            // spaces.
+                            bail!("read_outline: Shared indent failure")
+                        };
+                        stripped.push_str(line);
+                        stripped.push('\n');
+                    }
+                    Ok(idm::from_str(&stripped)?)
+                }
             }
         }
     }
@@ -48,7 +68,15 @@ impl IoPipe {
 
     pub fn write(&self, output: &Outline) -> Result<()> {
         if self.dest.to_str() == Some("-") {
-            print!("{}", idm::to_string_styled(self.style(), output)?);
+            let s = idm::to_string_styled(self.style(), output)?;
+            if self.stdin_prefix.is_empty() {
+                print!("{s}");
+            } else {
+                // Reintroduce the stdin prefix when printing back to stdout.
+                for line in s.lines() {
+                    println!("{}{line}", self.stdin_prefix);
+                }
+            }
         } else if self.dest.is_dir() {
             let files_written =
                 idm_tools::write_directory(&self.dest, self.style(), output)?;
@@ -107,10 +135,24 @@ impl TryFrom<IoArgs> for IoPipe {
             anyhow::bail!("Cannot use -i with standard input");
         }
 
+        let mut stdin_prefix = String::new();
+
         let source = if value.input.to_str() == Some("-") {
             // Read stdin to string.
             let mut input = String::new();
             std::io::stdin().read_to_string(&mut input)?;
+
+            // See if all lines are indented by a common amount.
+            let mut shared_indent =
+                parse::indentation(input.lines().next().unwrap_or(""));
+            for line in input.lines() {
+                let prefix = parse::indentation(line);
+                if prefix.len() < shared_indent.len() {
+                    shared_indent = prefix;
+                }
+            }
+            stdin_prefix = shared_indent.to_owned();
+
             Source::Stdin(input)
         } else if value.input.is_dir() {
             let (outline, style, files) =
@@ -140,7 +182,11 @@ impl TryFrom<IoArgs> for IoPipe {
             Some(x) => x.clone(),
         };
 
-        Ok(IoPipe { source, dest })
+        Ok(IoPipe {
+            source,
+            dest,
+            stdin_prefix,
+        })
     }
 }
 

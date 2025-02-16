@@ -40,6 +40,16 @@ pub fn important(s: &str) -> Option<&str> {
     s.strip_suffix(" *")
 }
 
+pub fn indentation(s: &str) -> &str {
+    let Some(i) = s
+        .char_indices()
+        .find_map(|(i, c)| (!c.is_whitespace()).then_some(i))
+    else {
+        return "";
+    };
+    &s[0..i]
+}
+
 /// Convert a `CamelCase` string to `kebab-case`.
 pub fn camel_to_kebab(input: &str) -> String {
     let mut kebab = String::new();
