@@ -57,6 +57,23 @@ enum Commands {
         #[command(flatten)]
         io: IoArgs,
     },
+
+    /// Find items with specific tags.
+    Tagged {
+        // A positional input argument is mandatory for this command so we
+        // spell out a variant of IoArgs.
+        /// Input file path, use '-' for stdin.
+        #[arg(required = true)]
+        input: PathBuf,
+
+        /// List of tags that must be present in items returned.
+        #[arg(required = true)]
+        tag_list: Vec<String>,
+
+        /// Output file path, defaults to stdout.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 use Commands::*;
@@ -84,6 +101,19 @@ fn main() -> Result<()> {
         }
 
         Weave { force, io } => weave::run(force, io.try_into()?),
+
+        Tagged {
+            input,
+            tag_list,
+            output,
+        } => {
+            let io = IoArgs {
+                input,
+                in_place: false,
+                output,
+            };
+            tagged::run(tag_list, io.try_into()?)
+        }
     }
 }
 
@@ -91,6 +121,7 @@ mod columnize;
 mod filter_existing;
 mod find_dupes;
 mod sort_by;
+mod tagged;
 mod weave;
 
 /// Standard input/output specification for subcommands.

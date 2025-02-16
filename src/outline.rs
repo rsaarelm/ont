@@ -112,6 +112,10 @@ impl Outline {
 
         Ok(ret)
     }
+
+    pub fn push(&mut self, s: Section) {
+        self.children.push(s);
+    }
 }
 
 impl From<((IndexMap<String, String>,), Vec<Section>)> for Outline {
