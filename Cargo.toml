@@ -13,6 +13,7 @@ resolver = "2"
 anyhow = "1"
 base64 = "0.22.1"
 clap = { version = "4", features = ["derive"] }
+csv = "1"
 derive_more = { version = "2", features = ["deref", "deref_mut"] }
 env_logger = "0.11"
 idm = "0.4"

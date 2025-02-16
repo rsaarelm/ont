@@ -74,6 +74,9 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Import bookmarks from Raindrop.io's CSV export.
+    ImportRaindrop(IoArgs),
 }
 
 use Commands::*;
@@ -114,12 +117,15 @@ fn main() -> Result<()> {
             };
             tagged::run(tag_list, io.try_into()?)
         }
+
+        ImportRaindrop(args) => raindrop::run(args.try_into()?),
     }
 }
 
 mod columnize;
 mod filter_existing;
 mod find_dupes;
+mod raindrop;
 mod sort_by;
 mod tagged;
 mod weave;

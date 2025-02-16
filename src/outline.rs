@@ -61,6 +61,15 @@ pub struct Outline {
     pub children: Vec<Section>,
 }
 
+impl FromIterator<Section> for Outline {
+    fn from_iter<I: IntoIterator<Item = Section>>(iter: I) -> Self {
+        Outline {
+            attrs: IndexMap::new(),
+            children: iter.into_iter().collect(),
+        }
+    }
+}
+
 impl Outline {
     pub fn new(
         attrs: IndexMap<String, String>,
