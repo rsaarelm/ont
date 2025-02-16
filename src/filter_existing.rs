@@ -8,11 +8,11 @@ use crate::IoPipe;
 pub fn run(collection: PathBuf, io: IoPipe) -> Result<()> {
     let mut outline: Outline = io.read_outline()?;
 
-    let (mut collection, _) = idm_tools::read_outline(collection)?;
+    let (collection, _) = idm_tools::read_outline(collection)?;
 
     let mut existing: BTreeSet<String> = BTreeSet::default();
 
-    for s in collection.iter_mut() {
+    for s in collection.iter() {
         existing.extend(s.body.uris()?);
     }
 

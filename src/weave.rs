@@ -33,8 +33,7 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
 
     let mut scripts = HashMap::new();
 
-    for (i, (entered_script, s)) in outline.context_iter_mut(false).enumerate()
-    {
+    for (i, (entered_script, s)) in outline.context_iter(false).enumerate() {
         if *entered_script || weave_filename(&s.head).is_some() {
             *entered_script = true;
             continue;

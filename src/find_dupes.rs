@@ -6,11 +6,11 @@ use idm_tools::{Outline, Section};
 use crate::IoPipe;
 
 pub fn run(io: IoPipe) -> Result<()> {
-    let mut outline: Outline = io.read_outline()?;
+    let outline: Outline = io.read_outline()?;
 
     let mut items: BTreeMap<Id, Vec<Section>> = BTreeMap::default();
 
-    for s in outline.iter_mut() {
+    for s in outline.iter() {
         let Ok(id) = Id::try_from(s.clone()) else {
             continue;
         };

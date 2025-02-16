@@ -6,7 +6,7 @@ use idm_tools::{parse, Outline};
 use crate::IoPipe;
 
 pub fn run(tag_list: Vec<String>, io: IoPipe) -> Result<()> {
-    let mut outline = io.read_outline()?;
+    let outline = io.read_outline()?;
 
     let search_tags = tag_list
         .into_iter()
@@ -14,7 +14,7 @@ pub fn run(tag_list: Vec<String>, io: IoPipe) -> Result<()> {
 
     let mut output = Outline::default();
 
-    for (state, s) in outline.context_iter_mut(IterState::default()) {
+    for (state, s) in outline.context_iter(IterState::default()) {
         if state.stop_recursing {
             continue;
         }

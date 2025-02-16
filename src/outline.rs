@@ -78,15 +78,29 @@ impl Outline {
         Outline { attrs, children }
     }
 
+    /// Iterate mutable recursive sections of the outline.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Section> {
         self.context_iter_mut(()).map(|x| x.1)
     }
 
+    /// Iterate mutable recursive sections of the outline with a context
+    /// object that is passed to child sections.
     pub fn context_iter_mut<C: Clone>(
         &mut self,
         init: C,
     ) -> ContextIterMut<'_, C> {
         ContextIterMut::new(self, init)
+    }
+
+    /// Iterate recursive sections of the outline.
+    pub fn iter(&self) -> impl Iterator<Item = &Section> {
+        self.context_iter(()).map(|x| x.1)
+    }
+
+    /// Iterate recursive sections of the outline with a context object that
+    /// is passed to child sections.
+    pub fn context_iter<C: Clone>(&self, init: C) -> ContextIter<'_, C> {
+        ContextIter::new(self, init)
     }
 
     /// Get an attribute value deserialized to type.
@@ -193,6 +207,69 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
             // Add children of current item to stack.
             self.stack
                 .push((ctx, &mut current_item.body as *mut Outline, 0));
+
+            // Take a mutable pointer to the new context object passed to the
+            // child range and yield it along with current item. "len" is now
+            // a valid index since we have pushed a new item to the stack.
+            let ctx = &mut self.stack[len].0 as *mut C;
+
+            Some((&mut *ctx, current_item))
+        }
+    }
+}
+
+pub struct ContextIter<'a, C> {
+    // (context-value, pointer-to-outline, current-item)
+    stack: Vec<(C, *const Outline, usize)>,
+    phantom: std::marker::PhantomData<&'a Section>,
+}
+
+impl<'a, C: Clone> ContextIter<'a, C> {
+    fn new(outline: &'a Outline, init: C) -> Self {
+        let stack = vec![(init, outline as *const Outline, 0)];
+        ContextIter {
+            stack,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, C: Clone + 'a> Iterator for ContextIter<'a, C> {
+    type Item = (&'a mut C, &'a Section);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Remove completed ranges.
+        while !self.stack.is_empty() {
+            let (_, outline, i) = self.stack[self.stack.len() - 1];
+            if i >= unsafe { (*outline).children.len() } {
+                self.stack.pop();
+            } else {
+                break;
+            }
+        }
+
+        // End iteration if no more content left.
+        if self.stack.is_empty() {
+            return None;
+        }
+
+        let len = self.stack.len();
+
+        // Clone current context object. The clone is pushed to next stack
+        // layer and passed as mutable pointer to the iterating context.
+        // Context changes will show up in children.
+        let ctx = self.stack[len - 1].0.clone();
+
+        // Get index of next item to yield and increment index value on stack.
+        let idx = self.stack[len - 1].2;
+        self.stack[len - 1].2 += 1;
+
+        unsafe {
+            let current_item = &(*self.stack[len - 1].1).children[idx];
+
+            // Add children of current item to stack.
+            self.stack
+                .push((ctx, &current_item.body as *const Outline, 0));
 
             // Take a mutable pointer to the new context object passed to the
             // child range and yield it along with current item. "len" is now
