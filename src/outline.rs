@@ -1,8 +1,9 @@
 use std::fmt;
 
 use anyhow::Result;
+use derive_more::{Deref, DerefMut};
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::parse;
 
@@ -114,6 +115,22 @@ impl Outline {
         Ok(Some(idm::from_str(a)?))
     }
 
+    /// Get an attribute as a handle that gets written back to the outline as
+    /// it drops out of scope.
+    pub fn get_mut<'a, T: DeserializeOwned + Serialize>(
+        &'a mut self,
+        name: &str,
+    ) -> Result<Option<FieldHandle<'a, T>>> {
+        let inner = self.get(name)?;
+        let Some(inner) = inner else { return Ok(None) };
+
+        Ok(Some(FieldHandle {
+            inner,
+            name: name.to_owned(),
+            parent: self,
+        }))
+    }
+
     pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
         self.attrs.insert(name.to_owned(), idm::to_string(value)?);
         Ok(())
@@ -152,6 +169,23 @@ impl From<((IndexMap<String, String>,), Vec<Section>)> for Outline {
 impl From<Outline> for ((IndexMap<String, String>,), Vec<Section>) {
     fn from(val: Outline) -> Self {
         ((val.attrs,), val.children)
+    }
+}
+
+#[derive(Deref, DerefMut)]
+pub struct FieldHandle<'a, T: Serialize> {
+    #[deref]
+    #[deref_mut]
+    inner: T,
+    name: String,
+    parent: &'a mut Outline,
+}
+
+impl<'a, T: Serialize> Drop for FieldHandle<'a, T> {
+    fn drop(&mut self) {
+        self.parent
+            .set(&self.name, &self.inner)
+            .expect("FieldHandle: Failed to set");
     }
 }
 

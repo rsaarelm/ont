@@ -12,7 +12,7 @@ pub fn run(replacements: PathBuf, io: IoPipe) -> Result<()> {
 
     let mut item_count = 0;
     for s in outline.iter_mut() {
-        if let Some(mut tags) = s.body.get::<Vec<String>>("tags").unwrap() {
+        if let Some(mut tags) = s.body.get_mut::<Vec<String>>("tags").unwrap() {
             for i in (0..tags.len()).rev() {
                 if let Some(replacements) = replacements.get(&tags[i]) {
                     // Empty items in replacement list are no-ops, you can't
@@ -43,9 +43,6 @@ pub fn run(replacements: PathBuf, io: IoPipe) -> Result<()> {
                     }
                 }
             }
-
-            // Replace the tags.
-            s.body.set("tags", &tags).unwrap();
         }
     }
 
