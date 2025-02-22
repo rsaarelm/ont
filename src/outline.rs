@@ -3,7 +3,7 @@ use std::fmt;
 use anyhow::Result;
 use derive_more::{Deref, DerefMut};
 use indexmap::IndexMap;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::parse;
 
@@ -188,7 +188,7 @@ pub struct FieldHandle<'a, T: Serialize> {
     parent: &'a mut Outline,
 }
 
-impl<'a, T: Serialize> Drop for FieldHandle<'a, T> {
+impl<T: Serialize> Drop for FieldHandle<'_, T> {
     fn drop(&mut self) {
         self.parent
             .set(&self.name, &self.inner)

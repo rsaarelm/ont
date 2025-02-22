@@ -7,7 +7,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use base64::prelude::*;
 use idm_tools::{Outline, Section};
 use lazy_regex::regex;

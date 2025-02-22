@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 mod collection;
 pub use collection::{read_directory, write_directory};

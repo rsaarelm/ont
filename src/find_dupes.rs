@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, fmt};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use idm_tools::{Outline, Section};
 
 use crate::IoPipe;

@@ -1,8 +1,8 @@
 //! Parsing primitives
 
 use nom::{
-    branch::alt, character::complete::one_of, combinator::recognize,
-    multi::many1, sequence::pair, IResult, Parser,
+    IResult, Parser, branch::alt, character::complete::one_of,
+    combinator::recognize, multi::many1, sequence::pair,
 };
 
 /// Match WikiWords
@@ -27,11 +27,7 @@ pub fn wiki_word(s: &str) -> Option<&str> {
         return None;
     };
 
-    if rest.is_empty() {
-        Some(word)
-    } else {
-        None
-    }
+    if rest.is_empty() { Some(word) } else { None }
 }
 
 /// Match important headlines that end with " *", return the part before the

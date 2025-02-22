@@ -1,8 +1,8 @@
 use std::{collections::BTreeSet, io::Read, path::PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use idm::ser::Indentation;
-use idm_tools::{parse, Outline};
+use idm_tools::{Outline, parse};
 
 use crate::IoArgs;
 

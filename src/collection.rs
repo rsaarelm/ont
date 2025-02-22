@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use idm::ser::Indentation;
 use lazy_regex::regex;
 
@@ -117,7 +117,9 @@ pub fn read_directory(
                         match style {
                             None => *style = Some(Indentation::Spaces(2)),
                             Some(Indentation::Tabs) => {
-                                bail!("read_directory: inconsistent indentation in {path:?}");
+                                bail!(
+                                    "read_directory: inconsistent indentation in {path:?}"
+                                );
                             }
                             _ => {}
                         }
@@ -126,7 +128,9 @@ pub fn read_directory(
                         match style {
                             None => *style = Some(Indentation::Tabs),
                             Some(Indentation::Spaces(_)) => {
-                                bail!("read_directory: inconsistent indentation in {path:?}");
+                                bail!(
+                                    "read_directory: inconsistent indentation in {path:?}"
+                                );
                             }
                             _ => {}
                         }
