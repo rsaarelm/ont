@@ -40,6 +40,11 @@ impl IoPipe {
                 } else {
                     let mut stripped = String::new();
                     for line in content.lines() {
+                        if line.trim().is_empty() {
+                            stripped.push('\n');
+                            continue;
+                        }
+
                         let Some(line) = line.strip_prefix(&self.stdin_prefix)
                         else {
                             // We can hit this if the input is mixing tabs and
@@ -74,7 +79,11 @@ impl IoPipe {
             } else {
                 // Reintroduce the stdin prefix when printing back to stdout.
                 for line in s.lines() {
-                    println!("{}{line}", self.stdin_prefix);
+                    if line.trim().is_empty() {
+                        println!();
+                    } else {
+                        println!("{}{line}", self.stdin_prefix);
+                    }
                 }
             }
         } else if self.dest.is_dir() {
@@ -143,9 +152,12 @@ impl TryFrom<IoArgs> for IoPipe {
             std::io::stdin().read_to_string(&mut input)?;
 
             // See if all lines are indented by a common amount.
-            let mut shared_indent =
-                parse::indentation(input.lines().next().unwrap_or(""));
-            for line in input.lines() {
+            let nonempty_lines: Vec<&str> =
+                input.lines().filter(|l| !l.trim().is_empty()).collect();
+            let mut shared_indent = parse::indentation(
+                nonempty_lines.iter().copied().next().unwrap_or(""),
+            );
+            for &line in &nonempty_lines {
                 let prefix = parse::indentation(line);
                 if prefix.len() < shared_indent.len() {
                     shared_indent = prefix;
