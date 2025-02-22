@@ -18,6 +18,7 @@ derive_more = { version = "2", features = ["deref", "deref_mut"] }
 env_logger = "0.11"
 idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
+itertools = "0.14"
 lazy-regex = "3"
 log = "0.4"
 nom = "8"

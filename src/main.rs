@@ -15,29 +15,12 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Convert a list of rows into a list of columns from those rows.
-    Columnize(IoArgs),
-
     /// Parse input into IDM and echo it back, use to find unparseable input
     /// or irregularities that don't survive a roundtrip.
     Cat(IoArgs),
 
-    /// Find duplicate elements in a collection.
-    FindDupes(IoArgs),
-
-    /// Filter items that already exist in the collection out of the input.
-    SortBy {
-        /// Field to sort lexically by.
-        #[arg(long, default_value = "date")]
-        sort_field: String,
-
-        /// Bubble favorited items (marked with trailing ` *`) to top of list.
-        #[arg(short = 'f', long, default_value = "false")]
-        separate_favorites: bool,
-
-        #[command(flatten)]
-        io: IoArgs,
-    },
+    /// Convert a list of rows into a list of columns from those rows.
+    Columnize(IoArgs),
 
     /// Filter out items with URIs that exist in collection from the input.
     FilterExisting {
@@ -48,11 +31,36 @@ enum Commands {
         io: IoArgs,
     },
 
-    /// Weave outputs of embedded scripts into file.
-    Weave {
-        /// Ignore cache annotations and re-run all scripts.
-        #[arg(long)]
-        force: bool,
+    /// Find duplicate elements in a collection.
+    FindDupes(IoArgs),
+
+    /// Import bookmarks from Raindrop.io's CSV export.
+    ImportRaindrop(IoArgs),
+
+    /// List all tags in a collection.
+    ListTags(IoArgs),
+
+    /// Rewrite tags in a collection based on a replacement list.
+    ReplaceTags {
+        /// Tag replacement list, a file with lines with format `old1-tag
+        /// new1-tag` or `old2-tag  new2-tag new3-tag ...`. The old tags will
+        /// be removed and all the new tags will be added. Lines with just a
+        /// single tag name in the replacements file do nothing.
+        replacements: PathBuf,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
+
+    /// Filter items that already exist in the collection out of the input.
+    SortBy {
+        /// Field to sort lexically by.
+        #[arg(long, default_value = "date")]
+        sort_field: String,
+
+        /// Bubble favorited items (marked with trailing ` *`) to top of list.
+        #[arg(short = 'f', long, default_value = "false")]
+        separate_favorites: bool,
 
         #[command(flatten)]
         io: IoArgs,
@@ -75,23 +83,31 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
-    /// Import bookmarks from Raindrop.io's CSV export.
-    ImportRaindrop(IoArgs),
+    /// Format table columns.
+    Tf {
+        /// Treat every column as left-aligned textual data, don't try to
+        /// detect columns of numeric data.
+        #[arg(long)]
+        no_number_parsing: bool,
 
-    /// Rewrite tags in a collection based on a replacement list.
-    ReplaceTags {
-        /// Tag replacement list, a file with lines with format `old1-tag
-        /// new1-tag` or `old2-tag  new2-tag new3-tag ...`. The old tags will
-        /// be removed and all the new tags will be added. Lines with just a
-        /// single tag name in the replacements file do nothing.
-        replacements: PathBuf,
+        /// How many columns to align, if set to 0, align every column
+        /// shared by all nonempty rows.
+        #[arg(long, default_value = "0")]
+        num_columns: usize,
 
         #[command(flatten)]
         io: IoArgs,
     },
 
-    /// List all tags in a collection.
-    ListTags(IoArgs),
+    /// Weave outputs of embedded scripts into file.
+    Weave {
+        /// Ignore cache annotations and re-run all scripts.
+        #[arg(long)]
+        force: bool,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 }
 
 use Commands::*;
@@ -159,6 +175,12 @@ fn main() -> Result<()> {
             }
             io.write_text(&out)
         }
+
+        Tf {
+            no_number_parsing,
+            num_columns,
+            io,
+        } => tf::run(no_number_parsing, num_columns, io.try_into()?),
     }
 }
 
@@ -169,6 +191,7 @@ mod raindrop;
 mod replace_tags;
 mod sort_by;
 mod tagged;
+mod tf;
 mod weave;
 
 /// Standard input/output specification for subcommands.

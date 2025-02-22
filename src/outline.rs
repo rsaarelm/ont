@@ -20,10 +20,9 @@ pub struct Section {
 
 impl Section {
     pub fn new(head: impl Into<String>, body: Outline) -> Self {
-        Section {
-            head: head.into(),
-            body,
-        }
+        let head = head.into();
+        assert!(head.chars().all(|c| c != '\n'));
+        Section { head, body }
     }
 
     pub fn is_important(&self) -> bool {
@@ -131,6 +130,10 @@ impl Outline {
         }))
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.attrs.is_empty() && self.children.is_empty()
+    }
+
     pub fn set<T: Serialize>(&mut self, name: &str, value: &T) -> Result<()> {
         self.attrs.insert(name.to_owned(), idm::to_string(value)?);
         Ok(())
@@ -155,6 +158,10 @@ impl Outline {
 
     pub fn push(&mut self, s: Section) {
         self.children.push(s);
+    }
+
+    pub fn push_line(&mut self, s: impl Into<String>) {
+        self.children.push(Section::new(s, Default::default()));
     }
 }
 
