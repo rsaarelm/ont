@@ -15,6 +15,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// List all links in notes
+    AllLinks(IoArgs),
+
     /// Parse input into IDM and echo it back, use to find unparseable input
     /// or irregularities that don't survive a roundtrip.
     Cat(IoArgs),
@@ -118,11 +121,35 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Columnize(args) => columnize::run(args.try_into()?),
+        AllLinks(args) => {
+            use idm_tools::Outline;
+            let mut seen: std::collections::HashSet<String> =
+                Default::default();
+
+            let io = IoPipe::try_from(args)?;
+            let mut out = Outline::default();
+            for sec in io.read_outline()?.iter() {
+                if let Ok(Some(uri)) = sec.body.get::<String>("uri") {
+                    if seen.contains(&uri) {
+                        continue;
+                    }
+                    seen.insert(uri.clone());
+                    if uri.starts_with("http") {
+                        let mut sec = sec.clone();
+                        // Only take the metadata.
+                        sec.body.children.clear();
+                        out.push(sec);
+                    }
+                }
+            }
+
+            io.write(&out)
+        }
         Cat(args) => {
             let io = IoPipe::try_from(args)?;
             io.write(&io.read_outline()?)
         }
+        Columnize(args) => columnize::run(args.try_into()?),
         FindDupes(args) => find_dupes::run(args.try_into()?),
         SortBy {
             sort_field,
