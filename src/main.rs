@@ -1,9 +1,13 @@
-use std::path::PathBuf;
+use std::{
+    collections::{BTreeSet, HashMap},
+    path::PathBuf,
+};
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 mod io_pipe;
+use idm_tools::Outline;
 use io_pipe::IoPipe;
 
 #[derive(Debug, Parser)]
@@ -39,6 +43,9 @@ enum Commands {
 
     /// Import bookmarks from Raindrop.io's CSV export.
     ImportRaindrop(IoArgs),
+
+    /// Look for suspiciously close tags and mark them as errors.
+    LintTags(IoArgs),
 
     /// List all tags in a collection.
     ListTags(IoArgs),
@@ -182,20 +189,62 @@ fn main() -> Result<()> {
             replace_tags::run(replacements, io.try_into()?)
         }
 
-        ListTags(args) => {
-            use std::{collections::BTreeSet, fmt::Write};
-
+        LintTags(args) => {
             let io = IoPipe::try_from(args)?;
-            let mut outline = io.read_outline()?;
-            let tags: BTreeSet<String> = outline
-                .iter_mut()
-                .flat_map(|s| {
-                    s.body
-                        .get::<Vec<String>>("tags")
-                        .unwrap_or_default()
-                        .unwrap_or_default()
+            let outline = io.read_outline()?;
+            let tags = get_tags(&outline);
+
+            // Collect sets of suspiciously similar tags.
+            let mut typos: HashMap<String, Vec<String>> = HashMap::new();
+            for (i, a) in tags.iter().enumerate() {
+                for b in tags.iter().skip(i + 1) {
+                    // It's useless for very short tags.
+                    if a.len() <= 4 || b.len() <= 4 {
+                        continue;
+                    }
+                    let distance = levenshtein::levenshtein(a, b);
+                    let threshold = match a.len() + b.len() {
+                        x if x < 16 => 1,
+                        _ => 2,
+                    };
+                    if distance <= threshold && distance > 0 {
+                        typos.entry(a.clone()).or_default().push(b.clone());
+                        typos.entry(b.clone()).or_default().push(a.clone());
+                    }
+                }
+            }
+
+            // Deduplicate.
+            let typos: BTreeSet<Vec<String>> = typos
+                .into_iter()
+                .map(|(k, v)| {
+                    let mut v = v;
+                    v.push(k);
+                    v.sort();
+                    v
                 })
                 .collect();
+
+            // Sort by longest (most likely to be an actual typo) last.
+            let mut typos: Vec<Vec<String>> = typos.into_iter().collect();
+            typos.sort_by_key(|v| v[0].len());
+
+            for seq in &typos {
+                for w in seq {
+                    print!("{} ", w);
+                }
+                println!();
+            }
+
+            Ok(())
+        }
+
+        ListTags(args) => {
+            use std::fmt::Write;
+
+            let io = IoPipe::try_from(args)?;
+            let outline = io.read_outline()?;
+            let tags = get_tags(&outline);
             let mut out = String::new();
             for tag in tags {
                 writeln!(out, "{}", tag)?;
@@ -244,4 +293,16 @@ pub struct IoArgs {
     // that we can differentiate between the user explicitly asking for stdout
     // output or just writing minimal calls that might blast a whole
     // collection to stdout. Haven't bothered to implement that yet though.
+}
+
+fn get_tags(outline: &Outline) -> BTreeSet<String> {
+    outline
+        .iter()
+        .flat_map(|s| {
+            s.body
+                .get::<Vec<String>>("tags")
+                .unwrap_or_default()
+                .unwrap_or_default()
+        })
+        .collect()
 }

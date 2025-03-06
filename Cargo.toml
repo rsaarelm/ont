@@ -20,6 +20,7 @@ idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
 itertools = "0.14"
 lazy-regex = "3"
+levenshtein = "1"
 log = "0.4"
 nom = "8"
 serde = { version = "1", features = ["derive"] }
