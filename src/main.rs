@@ -53,7 +53,7 @@ enum Commands {
     /// Rewrite tags in a collection based on a replacement list.
     ReplaceTags {
         /// Tag replacement list, a file with lines with format `old1-tag
-        /// new1-tag` or `old2-tag  new2-tag new3-tag ...`. The old tags will
+        /// new1-tag` or `old2-tag new2-tag new3-tag ...`. The old tags will
         /// be removed and all the new tags will be added. Lines with just a
         /// single tag name in the replacements file do nothing.
         replacements: PathBuf,
