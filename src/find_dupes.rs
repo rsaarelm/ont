@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
 use anyhow::{bail, Result};
-use idm_tools::{Outline, Section};
+use ont::{Outline, Section};
 
 use crate::IoPipe;
 

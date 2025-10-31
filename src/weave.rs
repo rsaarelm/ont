@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{bail, Result};
 use base64::prelude::*;
-use idm_tools::{Outline, Section};
+use ont::{Outline, Section};
 use lazy_regex::regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

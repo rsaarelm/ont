@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use idm_tools::{parse, Outline};
+use ont::{parse, Outline};
 
 use crate::IoPipe;
 

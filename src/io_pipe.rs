@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, io::Read, path::PathBuf};
 
 use anyhow::{bail, Result};
 use idm::ser::Indentation;
-use idm_tools::{parse, Outline};
+use ont::{parse, Outline};
 
 use crate::IoArgs;
 
@@ -88,7 +88,7 @@ impl IoPipe {
             }
         } else if self.dest.is_dir() {
             let files_written =
-                idm_tools::write_directory(&self.dest, self.style(), output)?;
+                ont::write_directory(&self.dest, self.style(), output)?;
             if let (Some(root), true) = (self.path(), self.is_in_place()) {
                 // Remove files that were initially read but were not written
                 // in output when rewriting a collection in place.
@@ -97,7 +97,7 @@ impl IoPipe {
                     _ => Default::default(),
                 };
                 for file in original_files.difference(&files_written) {
-                    idm_tools::tidy_delete(root, file)?;
+                    ont::tidy_delete(root, file)?;
                 }
             }
         } else {
@@ -168,7 +168,7 @@ impl TryFrom<IoArgs> for IoPipe {
             Source::Stdin(input)
         } else if value.input.is_dir() {
             let (outline, style, files) =
-                idm_tools::read_directory(&value.input)?;
+                ont::read_directory(&value.input)?;
             Source::Collection {
                 path: value.input.clone(),
                 files,

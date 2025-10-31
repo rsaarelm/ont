@@ -1,7 +1,7 @@
 use std::{fmt::Write, iter::once};
 
 use anyhow::Result;
-use idm_tools::Outline;
+use ont::Outline;
 use itertools::Itertools;
 
 use crate::IoPipe;

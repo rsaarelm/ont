@@ -1,11 +1,11 @@
 [package]
-name = "idm-tools"
+name = "ont"
 version = "0.1.0"
 edition = "2021"
 authors = ["Risto Saarelma <risto.saarelma@iki.fi>"]
 description = "Implicit Data Markup utilities"
-homepage = "https://github.com/rsaarelm/idm-tools"
-repository = "https://github.com/rsaarelm/idm-tools"
+homepage = "https://github.com/rsaarelm/ont"
+repository = "https://github.com/rsaarelm/ont"
 license = "MIT/Apache-2.0"
 resolver = "2"
 

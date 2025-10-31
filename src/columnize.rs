@@ -1,5 +1,5 @@
 use anyhow::Result;
-use idm_tools::{Outline, Section};
+use ont::{Outline, Section};
 use indexmap::IndexSet;
 
 use crate::IoPipe;

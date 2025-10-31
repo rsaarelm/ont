@@ -1,14 +1,14 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
 use anyhow::Result;
-use idm_tools::Outline;
+use ont::Outline;
 
 use crate::IoPipe;
 
 pub fn run(collection: PathBuf, io: IoPipe) -> Result<()> {
     let mut outline: Outline = io.read_outline()?;
 
-    let (collection, _) = idm_tools::read_outline(collection)?;
+    let (collection, _) = ont::read_outline(collection)?;
 
     let mut existing: BTreeSet<String> = BTreeSet::default();
 

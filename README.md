@@ -1,3 +1,3 @@
-# IDM tools
+# Outline Note Tool
 
-Utility library for using the [IDM](https://github.com/rsaarelm/idm/) format.
+Utility tools and library for notes in [IDM](https://github.com/rsaarelm/idm/) format.

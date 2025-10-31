@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 mod io_pipe;
-use idm_tools::Outline;
+use ont::Outline;
 use io_pipe::IoPipe;
 
 #[derive(Debug, Parser)]
@@ -129,7 +129,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         AllLinks(args) => {
-            use idm_tools::Outline;
+            use ont::Outline;
             let mut seen: std::collections::HashSet<String> =
                 Default::default();
 

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use anyhow::Result;
-use idm_tools::{Outline, Section};
+use ont::{Outline, Section};
 
 use crate::IoPipe;
 
