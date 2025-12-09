@@ -243,7 +243,8 @@ impl<'a, C: Clone + 'a> Iterator for ContextIterMut<'a, C> {
         self.stack[len - 1].2 += 1;
 
         unsafe {
-            let current_item = &mut (*self.stack[len - 1].1).children[idx];
+            let current_item =
+                &mut (&mut (*self.stack[len - 1].1).children)[idx];
 
             // Add children of current item to stack.
             self.stack
@@ -306,7 +307,7 @@ impl<'a, C: Clone + 'a> Iterator for ContextIter<'a, C> {
         self.stack[len - 1].2 += 1;
 
         unsafe {
-            let current_item = &(*self.stack[len - 1].1).children[idx];
+            let current_item = &(&(*self.stack[len - 1].1).children)[idx];
 
             // Add children of current item to stack.
             self.stack
