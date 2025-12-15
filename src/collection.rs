@@ -235,7 +235,7 @@ fn build_files(
 
         if is_directory {
             // Create a subdirectory.
-            build_files(files, path.as_ref().join(&section.head), style, data)?;
+            build_files(files, path.as_ref().join(&section.head), style, &section.body)?;
             continue;
         }
 
