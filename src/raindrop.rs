@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use ont::{Outline, Section};
 use serde::Deserialize;
@@ -8,9 +10,24 @@ pub fn run(io: IoPipe) -> Result<()> {
     let content = io.read_text()?;
 
     let mut rdr = csv::Reader::from_reader(content.as_bytes());
-    let bookmarks: Vec<Bookmark> =
+    let mut bookmarks: Vec<Bookmark> =
         rdr.deserialize().collect::<Result<_, _>>()?;
-    let outline: Outline = bookmarks.into_iter().map(Section::from).collect();
+
+    // Put them in ascending order.
+    bookmarks.sort_by_key(|b| b.created.clone());
+
+    // Separate bookmarks by folder.
+    let mut folders: BTreeMap<String, Outline> = Default::default();
+    for b in bookmarks {
+        folders.entry(b.folder.clone())
+            .or_default()
+            .children
+            .push(Section::from(b));
+        }
+
+    let outline: Outline = folders.into_iter().map(|(folder, o)| {
+        Section::new(folder, o)
+    }).collect();
 
     io.write(&outline)
 }
