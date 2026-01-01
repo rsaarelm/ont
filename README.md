@@ -62,6 +62,9 @@ Some of the current ones:
 * `tf`: Format a block of tabular IDM into nicely lined-up columns, try to
   align all-numeric columns to the right instead of to the left.
 
+* `import-raindrop` and `export-raindrop`: Convert CSV export from [raindrop.io](https://raindrop.io/) bookmark manager to IDM notes
+  and convert an IDM bookmark list to a Raindrop import CSV.
+
 * `weave`: Execute script file fragments embedded in the outline and embed their output underneath the script.
   Have your very own interactive notebook system without a weird web server or an unreadable JSON-based internal save format.
 
