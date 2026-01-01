@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::IoPipe;
 
-pub fn import(io: IoPipe) -> Result<()> {
+pub fn import(io: IoPipe, ignore_excerpt: bool) -> Result<()> {
     let content = io.read_text()?;
 
     let mut rdr = csv::Reader::from_reader(content.as_bytes());
@@ -15,6 +15,12 @@ pub fn import(io: IoPipe) -> Result<()> {
 
     // Put them in ascending order.
     bookmarks.sort_by_key(|b| b.created.clone());
+
+    if ignore_excerpt {
+        for b in &mut bookmarks {
+            b.excerpt.clear();
+        }
+    }
 
     // Separate bookmarks by folder.
     let mut folders: BTreeMap<String, Outline> = Default::default();

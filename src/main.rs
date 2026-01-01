@@ -53,7 +53,14 @@ enum Commands {
     },
 
     /// Import bookmarks from Raindrop.io's CSV export.
-    ImportRaindrop(IoArgs),
+    ImportRaindrop {
+        /// Strip out the raindrop-generated excerpt.
+        #[arg(long)]
+        ignore_excerpt: bool,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 
     /// Export bookmarks in collection to Raindrop.io's CSV format.
     ExportRaindrop {
@@ -204,7 +211,7 @@ fn main() -> Result<()> {
             tagged::run(tag_list, io.try_into()?)
         }
 
-        ImportRaindrop(args) => raindrop::import(args.try_into()?),
+        ImportRaindrop { ignore_excerpt, io } => raindrop::import(io.try_into()?, ignore_excerpt),
 
         ExportRaindrop { folder, io } => {
             raindrop::export(io.try_into()?, folder)
