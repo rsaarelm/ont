@@ -7,8 +7,8 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 mod io_pipe;
-use ont::Outline;
 use io_pipe::IoPipe;
+use ont::Outline;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -43,6 +43,16 @@ enum Commands {
 
     /// Import bookmarks from Raindrop.io's CSV export.
     ImportRaindrop(IoArgs),
+
+    /// Export bookmarks in collection to Raindrop.io's CSV format.
+    ExportRaindrop {
+        /// Folder name to assign to all exported bookmarks.
+        #[arg(long, default_value = "")]
+        folder: String,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 
     /// Look for suspiciously close tags and mark them as errors.
     LintTags(IoArgs),
@@ -183,7 +193,11 @@ fn main() -> Result<()> {
             tagged::run(tag_list, io.try_into()?)
         }
 
-        ImportRaindrop(args) => raindrop::run(args.try_into()?),
+        ImportRaindrop(args) => raindrop::import(args.try_into()?),
+
+        ExportRaindrop { folder, io } => {
+            raindrop::export(io.try_into()?, folder)
+        }
 
         ReplaceTags { replacements, io } => {
             replace_tags::run(replacements, io.try_into()?)

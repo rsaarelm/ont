@@ -68,3 +68,13 @@ pub fn tidy_delete(root: &Path, mut path: &Path) -> Result<()> {
 
     Ok(())
 }
+
+pub fn web_url(s: &Section) -> Option<String> {
+    let uri: String = s.body.get::<String>("uri").unwrap()?;
+    // Gonna ignore ftp: and other weird 90s stuff.
+    if uri.starts_with("http:") || uri.starts_with("https:") {
+        Some(uri)
+    } else {
+        None
+    }
+}
