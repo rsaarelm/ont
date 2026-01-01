@@ -5,7 +5,7 @@ use ont::Outline;
 
 use crate::IoPipe;
 
-pub fn run(collection: PathBuf, io: IoPipe) -> Result<()> {
+pub fn run(io: IoPipe, collection: PathBuf, strict: bool) -> Result<()> {
     let mut outline: Outline = io.read_outline()?;
 
     let (collection, _) = ont::read_outline(collection)?;
@@ -13,18 +13,28 @@ pub fn run(collection: PathBuf, io: IoPipe) -> Result<()> {
     let mut existing: BTreeSet<String> = BTreeSet::default();
 
     for s in collection.iter() {
-        existing.extend(s.body.uris()?);
+        for uri in s.body.uris()? {
+            if strict {
+                existing.insert(uri);
+            } else {
+                existing.insert(ont::normalize_url(&uri));
+            }
+        }
     }
 
     let mut removes = 0;
 
     for s in outline.iter_mut() {
         for i in (0..s.body.children.len()).rev() {
-            let Some(uri) =
+            let Some(mut uri) =
                 s.body.children[i].body.get::<String>("uri").unwrap()
             else {
                 continue;
             };
+
+            if !strict {
+                uri = ont::normalize_url(&uri);
+            }
 
             if existing.contains(&uri) {
                 s.body.children.remove(i);

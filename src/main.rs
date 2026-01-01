@@ -34,12 +34,23 @@ enum Commands {
         /// Path to existing collection input will be compared against.
         collection: PathBuf,
 
+        /// If set, don't try to normalize web URLs around http/https and archive / mirror services.
+        #[arg(long)]
+        strict: bool,
+
         #[command(flatten)]
         io: IoArgs,
     },
 
     /// Find duplicate elements in a collection.
-    FindDupes(IoArgs),
+    FindDupes {
+        /// If set, don't try to normalize web URLs around http/https and archive / mirror services.
+        #[arg(long)]
+        strict: bool,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 
     /// Import bookmarks from Raindrop.io's CSV export.
     ImportRaindrop(IoArgs),
@@ -167,15 +178,15 @@ fn main() -> Result<()> {
             io.write(&io.read_outline()?)
         }
         Columnize(args) => columnize::run(args.try_into()?),
-        FindDupes(args) => find_dupes::run(args.try_into()?),
+        FindDupes { strict, io }=> find_dupes::run(io.try_into()?, strict),
         SortBy {
             sort_field,
             separate_favorites,
             io,
         } => sort_by::run(io.try_into()?, sort_field, separate_favorites),
 
-        FilterExisting { collection, io } => {
-            filter_existing::run(collection, io.try_into()?)
+        FilterExisting { collection, strict, io } => {
+            filter_existing::run(io.try_into()?, collection, strict)
         }
 
         Weave { force, io } => weave::run(force, io.try_into()?),

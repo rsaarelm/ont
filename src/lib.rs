@@ -9,6 +9,7 @@ pub mod parse;
 
 mod outline;
 use idm::ser::Indentation;
+use lazy_regex::regex;
 pub use outline::{Outline, Section, SimpleOutline, SimpleSection};
 
 pub fn read_outline(path: impl AsRef<Path>) -> Result<(Outline, Indentation)> {
@@ -76,5 +77,125 @@ pub fn web_url(s: &Section) -> Option<String> {
         Some(uri)
     } else {
         None
+    }
+}
+
+/// Try to merge differntly formatted URLs pointing to the same thing into one identifier.
+pub fn normalize_url(url: &str) -> String {
+    let url = url.trim();
+
+    let wayback_re =
+        regex!(r"^https?://web\.archive\.org/web/\d+/(https?://.+)$");
+    let archive_re =
+        regex!(r"^https?://archive\.(is|md|li|ph|today)/.+/(https?://.+)$");
+
+    // Recursively remove archiver wrappers.
+    if let Some(caps) = wayback_re.captures(url) {
+        return normalize_url(&caps[1]);
+    }
+    if let Some(caps) = archive_re.captures(url) {
+        return normalize_url(&caps[2]);
+    }
+
+    // Various twitters and twitter-wrappers. We're assuming the numbers are unique so the username
+    // can be discarded.
+    let twitter_re = regex!(r"^https?://twitter\.com/.+/status/(\d+)$");
+    let xcom_re = regex!(r"^https?://x\.com/.+/status/(\d+)$");
+    let nitter_re =
+        regex!(r"^https?://nitter\.(net|poast.org)/.+/status/(\d+)$");
+    let xcancel_re = regex!(r"^https?://xcancel\.com/.+/status/(\d+)$");
+    let threadreader_re =
+        regex!(r"^https?://threadreaderapp\.com/thread/(\d+)(.html)?$");
+
+    if let Some(caps) = twitter_re.captures(url) {
+        return format!("https://twitter.com/a/status/{}", &caps[1]);
+    }
+    if let Some(caps) = xcom_re.captures(url) {
+        return format!("https://twitter.com/a/status/{}", &caps[1]);
+    }
+    if let Some(caps) = nitter_re.captures(url) {
+        return format!("https://twitter.com/a/status/{}", &caps[2]);
+    }
+    if let Some(caps) = xcancel_re.captures(url) {
+        return format!("https://twitter.com/a/status/{}", &caps[1]);
+    }
+    if let Some(caps) = threadreader_re.captures(url) {
+        return format!("https://twitter.com/a/status/{}", &caps[1]);
+    }
+
+    // Turn name.tumblr.com/post/ into www.tumblr.com/name/
+    let tumblr_re =
+        regex!(r"^https?://([a-zA-Z0-9_-]+)\.tumblr\.com/post/(.+)$");
+    if let Some(caps) = tumblr_re.captures(url) {
+        return format!("https://www.tumblr.com/{}/{}", &caps[1], &caps[2]);
+    }
+
+    // Force everything to https.
+    if url.starts_with("http://") {
+        format!("https://{}", &url[7..])
+    } else {
+        url.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_normalize_url() {
+        for (input, expected) in vec![
+            ("http://example.com", "https://example.com"),
+            ("https://example.com", "https://example.com"),
+            (
+                "http://web.archive.org/web/20220101010101/http://example.com",
+                "https://example.com",
+            ),
+            (
+                "https://archive.is/XYZ123/http://example.com",
+                "https://example.com",
+            ),
+            (
+                "https://archive.today/XYZ123/http://example.com",
+                "https://example.com",
+            ),
+            (
+                "https://archive.ph/XYZ123/http://example.com",
+                "https://example.com",
+            ),
+            (
+                "https://twitter.com/someuser/status/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://x.com/someuser/status/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://nitter.poast.org/someuser/status/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://nitter.net/someuser/status/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://xcancel.com/someuser/status/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://threadreaderapp.com/thread/1234567890",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://threadreaderapp.com/thread/1234567890.html",
+                "https://twitter.com/a/status/1234567890",
+            ),
+            (
+                "https://someblog.tumblr.com/post/12345/blag",
+                "https://www.tumblr.com/someblog/12345/blag",
+            ),
+        ] {
+            assert_eq!(normalize_url(input), expected);
+        }
     }
 }

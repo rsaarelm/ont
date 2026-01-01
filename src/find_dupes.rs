@@ -1,19 +1,23 @@
 use std::{collections::BTreeMap, fmt};
 
 use anyhow::{bail, Result};
-use ont::{Outline, Section};
+use ont::{Outline, Section, normalize_url};
 
 use crate::IoPipe;
 
-pub fn run(io: IoPipe) -> Result<()> {
+pub fn run(io: IoPipe, strict: bool) -> Result<()> {
     let outline: Outline = io.read_outline()?;
 
     let mut items: BTreeMap<Id, Vec<Section>> = BTreeMap::default();
 
     for s in outline.iter() {
-        let Ok(id) = Id::try_from(s.clone()) else {
+        let Ok(mut id) = Id::try_from(s.clone()) else {
             continue;
         };
+
+        if !strict {
+            id.normalize();
+        }
 
         items.entry(id).or_default().push(s.clone());
 
@@ -49,6 +53,16 @@ pub fn run(io: IoPipe) -> Result<()> {
 enum Id {
     Title(String),
     Uri(String),
+}
+
+impl Id {
+    pub fn normalize(&mut self) {
+        if let Id::Uri(uri) = self {
+            if uri.starts_with("http") {
+                *uri = normalize_url(uri);
+            }
+        }
+    }
 }
 
 impl fmt::Display for Id {
