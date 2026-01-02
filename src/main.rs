@@ -54,9 +54,9 @@ enum Commands {
 
     /// Import bookmarks from Raindrop.io's CSV export.
     ImportRaindrop {
-        /// Strip out the raindrop-generated excerpt.
+        /// Include the raindrop-generated excerpt
         #[arg(long)]
-        ignore_excerpt: bool,
+        include_excerpt: bool,
 
         #[command(flatten)]
         io: IoArgs,
@@ -185,16 +185,18 @@ fn main() -> Result<()> {
             io.write(&io.read_outline()?)
         }
         Columnize(args) => columnize::run(args.try_into()?),
-        FindDupes { strict, io }=> find_dupes::run(io.try_into()?, strict),
+        FindDupes { strict, io } => find_dupes::run(io.try_into()?, strict),
         SortBy {
             sort_field,
             separate_favorites,
             io,
         } => sort_by::run(io.try_into()?, sort_field, separate_favorites),
 
-        FilterExisting { collection, strict, io } => {
-            filter_existing::run(io.try_into()?, collection, strict)
-        }
+        FilterExisting {
+            collection,
+            strict,
+            io,
+        } => filter_existing::run(io.try_into()?, collection, strict),
 
         Weave { force, io } => weave::run(force, io.try_into()?),
 
@@ -211,7 +213,10 @@ fn main() -> Result<()> {
             tagged::run(tag_list, io.try_into()?)
         }
 
-        ImportRaindrop { ignore_excerpt, io } => raindrop::import(io.try_into()?, ignore_excerpt),
+        ImportRaindrop {
+            include_excerpt,
+            io,
+        } => raindrop::import(io.try_into()?, include_excerpt),
 
         ExportRaindrop { folder, io } => {
             raindrop::export(io.try_into()?, folder)

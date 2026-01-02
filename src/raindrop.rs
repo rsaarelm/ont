@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::IoPipe;
 
-pub fn import(io: IoPipe, ignore_excerpt: bool) -> Result<()> {
+pub fn import(io: IoPipe, include_excerpt: bool) -> Result<()> {
     let content = io.read_text()?;
 
     let mut rdr = csv::Reader::from_reader(content.as_bytes());
@@ -16,8 +16,18 @@ pub fn import(io: IoPipe, ignore_excerpt: bool) -> Result<()> {
     // Put them in ascending order.
     bookmarks.sort_by_key(|b| b.created.clone());
 
-    if ignore_excerpt {
-        for b in &mut bookmarks {
+    for b in &mut bookmarks {
+        if include_excerpt {
+            // Prepend "> " to every excerpt line.
+            let excerpt = b
+                .excerpt
+                .lines()
+                .map(|l| format!("> {}", l))
+                .collect::<Vec<_>>()
+                .join("\n");
+            b.excerpt = excerpt;
+        } else {
+            // Clear out the excerpt by default.
             b.excerpt.clear();
         }
     }
