@@ -112,6 +112,11 @@ enum Commands {
         #[arg(required = true)]
         input: PathBuf,
 
+        /// List matching items in a top-level outline instead of preserving
+        /// their parent branches.
+        #[arg(long)]
+        flatten: bool,
+
         /// List of tags that must be present in items returned.
         #[arg(required = true)]
         tag_list: Vec<String>,
@@ -202,6 +207,7 @@ fn main() -> Result<()> {
 
         Tagged {
             input,
+            flatten,
             tag_list,
             output,
         } => {
@@ -210,7 +216,7 @@ fn main() -> Result<()> {
                 in_place: false,
                 output,
             };
-            tagged::run(tag_list, io.try_into()?)
+            tagged::run(io.try_into()?, tag_list, flatten)
         }
 
         ImportRaindrop {

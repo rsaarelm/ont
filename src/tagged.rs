@@ -5,10 +5,16 @@ use ont::{parse, Outline, Section};
 
 use crate::IoPipe;
 
-pub fn run(tag_list: Vec<String>, io: IoPipe) -> Result<()> {
+pub fn run(io: IoPipe, tag_list: Vec<String>, flatten: bool) -> Result<()> {
     let outline = io.read_outline()?;
 
-    io.write(&prune_outline(&tag_list, BTreeSet::new(), &outline))
+    if flatten {
+        let mut sections = Vec::new();
+        collect_matching(&tag_list, BTreeSet::new(), &outline, &mut sections);
+        io.write(&Outline::from_iter(sections))
+    } else {
+        io.write(&prune_outline(&tag_list, BTreeSet::new(), &outline))
+    }
 }
 
 fn prune_outline(
@@ -63,4 +69,41 @@ fn prune_outline(
     }
 
     pruned
+}
+
+fn collect_matching(
+    search_tags: &[String],
+    mut inherited_tags: BTreeSet<String>,
+    outline: &Outline,
+    out: &mut Vec<Section>,
+) {
+    if let Ok(Some(tags)) = outline.get::<Vec<String>>("tags") {
+        inherited_tags.extend(tags);
+    }
+
+    for s in &outline.children {
+        let is_match = {
+            let tags = s.tags();
+
+            if !tags.is_empty() {
+                let mut set = inherited_tags.clone();
+                set.extend(tags);
+                search_tags.iter().all(|t| set.contains(t))
+            } else {
+                false
+            }
+        };
+
+        if is_match {
+            out.push(s.clone());
+        }
+
+        if let Some(title) = s.wiki_title() {
+            let mut set = inherited_tags.clone();
+            set.insert(parse::camel_to_kebab(title));
+            collect_matching(search_tags, set, &s.body, out);
+        } else {
+            collect_matching(search_tags, inherited_tags.clone(), &s.body, out);
+        }
+    }
 }
