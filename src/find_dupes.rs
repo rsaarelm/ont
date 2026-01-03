@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
 use anyhow::{bail, Result};
-use ont::{Outline, Section, normalize_url};
+use ont::{Outline, Section, parse};
 
 use crate::IoPipe;
 
@@ -59,7 +59,7 @@ impl Id {
     pub fn normalize(&mut self) {
         if let Id::Uri(uri) = self {
             if uri.starts_with("http") {
-                *uri = normalize_url(uri);
+                *uri = parse::normalized_url(uri);
             }
         }
     }

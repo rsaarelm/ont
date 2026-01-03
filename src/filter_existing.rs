@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
 use anyhow::Result;
-use ont::Outline;
+use ont::{Outline, parse};
 
 use crate::IoPipe;
 
@@ -17,7 +17,7 @@ pub fn run(io: IoPipe, collection: PathBuf, strict: bool) -> Result<()> {
             if strict {
                 existing.insert(uri);
             } else {
-                existing.insert(ont::normalize_url(&uri));
+                existing.insert(parse::normalized_url(&uri));
             }
         }
     }
@@ -33,7 +33,7 @@ pub fn run(io: IoPipe, collection: PathBuf, strict: bool) -> Result<()> {
             };
 
             if !strict {
-                uri = ont::normalize_url(&uri);
+                uri = parse::normalized_url(&uri);
             }
 
             if existing.contains(&uri) {
