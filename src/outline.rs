@@ -33,6 +33,22 @@ impl Section {
         let head = parse::important(&self.head).unwrap_or(&self.head);
         parse::wiki_word(head)
     }
+
+    pub fn tags(&self) -> Vec<String> {
+        let mut tags = Vec::new();
+
+        // Any WikiTitle is an implicit "wiki-title" tag.
+        if let Some(t) = self.wiki_title() {
+            tags.push(parse::camel_to_kebab(t));
+        }
+
+        // Tags from the :tags attribute.
+        if let Ok(Some(tags_attr)) = self.body.get::<Vec<String>>("tags") {
+            tags.extend(tags_attr);
+        }
+
+        tags
+    }
 }
 
 impl From<((String,), Outline)> for Section {

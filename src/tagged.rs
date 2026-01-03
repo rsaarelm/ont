@@ -1,50 +1,66 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use ont::{parse, Outline};
+use ont::{parse, Outline, Section};
 
 use crate::IoPipe;
 
 pub fn run(tag_list: Vec<String>, io: IoPipe) -> Result<()> {
     let outline = io.read_outline()?;
 
-    let search_tags = tag_list
-        .into_iter()
-        .collect::<std::collections::BTreeSet<_>>();
+    io.write(&prune_outline(&tag_list, BTreeSet::new(), &outline))
+}
 
-    let mut output = Outline::default();
+fn prune_outline(
+    search_tags: &[String],
+    mut inherited_tags: BTreeSet<String>,
+    outline: &Outline,
+) -> Outline {
+    let mut pruned = Outline::default();
+    // Do not copy attributes into the output when we're recursing.
+    // Only bring them in from sections that match the predicate.
 
-    for (state, s) in outline.context_iter(IterState::default()) {
-        if state.stop_recursing {
-            continue;
-        }
+    // Inherited set gets copied all over the place, but we'll eat the cost, it should mostly be
+    // pretty small.
+    if let Ok(Some(tags)) = outline.get::<Vec<String>>("tags") {
+        inherited_tags.extend(tags);
+    }
 
-        // A WikiTitle headline counts as a wiki-title tag.
-        if let Some(title) = s.wiki_title() {
-            state.tags.insert(parse::camel_to_kebab(title));
-        }
+    for s in &outline.children {
+        // Child is a match if it is a tag-bearing thing that matches all the search tags once we
+        // include inherited tags.
+        let is_match = {
+            let tags = s.tags();
 
-        // Read tags in the section.
-        let Ok(tags) = s.body.get::<Vec<String>>("tags") else {
-            continue;
+            if !tags.is_empty() {
+                let mut set = inherited_tags.clone();
+                set.extend(tags);
+                search_tags.iter().all(|t| set.contains(t))
+            } else {
+                false
+            }
         };
 
-        if let Some(tags) = tags {
-            state.tags.extend(tags);
+        // Direct matches go in as is.
+        if is_match {
+            pruned.push(s.clone());
+            continue;
         }
 
-        // If we found a section that matches all tags, add it to result.
-        if search_tags.is_subset(&state.tags) {
-            state.stop_recursing = true;
-            output.push(s.clone());
+        // Otherwise, recurse into children. Remember to add wiki-title as an inherited tag.
+        let body = if let Some(title) = s.wiki_title() {
+            let mut set = inherited_tags.clone();
+            set.insert(parse::camel_to_kebab(title));
+            prune_outline(search_tags, set, &s.body)
+        } else {
+            prune_outline(search_tags, inherited_tags.clone(), &s.body)
+        };
+
+        // Keep the section if at least some children survived.
+        if !body.children.is_empty() {
+            pruned.push(Section::new(s.head.clone(), body));
         }
     }
 
-    io.write(&output)
-}
-
-#[derive(Clone, Default, Debug)]
-struct IterState {
-    tags: BTreeSet<String>,
-    stop_recursing: bool,
+    pruned
 }
