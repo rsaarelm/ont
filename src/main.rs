@@ -78,6 +78,20 @@ enum Commands {
     /// List all tags in a collection.
     ListTags(IoArgs),
 
+    /// Rename a single tag in a collection.
+    RenameTag {
+        /// Old name for the tag.
+        #[arg(required = true)]
+        old: String,
+
+        /// New name for the tag
+        #[arg(required = true)]
+        new: String,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
+
     /// Rewrite tags in a collection based on a replacement list.
     ReplaceTags {
         /// Tag replacement list, a file with lines with format `old1-tag
@@ -185,12 +199,16 @@ fn main() -> Result<()> {
 
             io.write(&out)
         }
+
         Cat(args) => {
             let io = IoPipe::try_from(args)?;
             io.write(&io.read_outline()?)
         }
+
         Columnize(args) => columnize::run(args.try_into()?),
+
         FindDupes { strict, io } => find_dupes::run(io.try_into()?, strict),
+
         SortBy {
             sort_field,
             separate_favorites,
@@ -228,8 +246,12 @@ fn main() -> Result<()> {
             raindrop::export(io.try_into()?, folder)
         }
 
+        RenameTag { old, new, io } => {
+            replace_tags::rename(io.try_into()?, old, new)
+        }
+
         ReplaceTags { replacements, io } => {
-            replace_tags::run(replacements, io.try_into()?)
+            replace_tags::replace(io.try_into()?, replacements)
         }
 
         LintTags(args) => {

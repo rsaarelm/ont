@@ -4,7 +4,27 @@ use anyhow::Result;
 
 use crate::IoPipe;
 
-pub fn run(replacements: PathBuf, io: IoPipe) -> Result<()> {
+pub fn rename(io: IoPipe, old: String, new: String) -> Result<()> {
+    let mut outline = io.read_outline()?;
+
+    let mut item_count = 0;
+    for s in outline.iter_mut() {
+        if let Some(mut tags) = s.body.get_mut::<Vec<String>>("tags").unwrap() {
+            for t in tags.iter_mut() {
+                if *t == old {
+                    *t = new.clone();
+                    item_count += 1;
+                }
+            }
+        }
+    }
+
+    eprintln!("Renamed {item_count} tags");
+
+    io.write(&outline)
+}
+
+pub fn replace(io: IoPipe, replacements: PathBuf) -> Result<()> {
     let mut outline = io.read_outline()?;
 
     let replacements: HashMap<String, Vec<String>> =
