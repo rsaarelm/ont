@@ -107,11 +107,11 @@ enum Commands {
     /// Filter items that already exist in the collection out of the input.
     SortBy {
         /// Field to sort lexically by.
-        #[arg(long, default_value = "date")]
-        sort_field: String,
+        #[arg(short = 'f', long, default_value = "date")]
+        field: String,
 
         /// Bubble favorited items (marked with trailing ` *`) to top of list.
-        #[arg(short = 'f', long, default_value = "false")]
+        #[arg(short = 's', long, default_value = "false")]
         separate_favorites: bool,
 
         #[command(flatten)]
@@ -210,10 +210,10 @@ fn main() -> Result<()> {
         FindDupes { strict, io } => find_dupes::run(io.try_into()?, strict),
 
         SortBy {
-            sort_field,
+            field,
             separate_favorites,
             io,
-        } => sort_by::run(io.try_into()?, sort_field, separate_favorites),
+        } => sort_by::run(io.try_into()?, field, separate_favorites),
 
         FilterExisting {
             collection,
