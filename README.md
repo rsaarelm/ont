@@ -68,10 +68,15 @@ Some of the current ones:
 * `weave`: Execute script file fragments embedded in the outline and embed their output underneath the script.
   Have your very own interactive notebook system without a weird web server or an unreadable JSON-based internal save format.
 
-  Weave syntax in the outline note:
+  Weave syntax in the outline note: Code is indented under `>-` (for anonymous files)
+  or `>filename-goes-here` for named files that can be referred to by other code blocks.
+  Output is indented under output indicator `==` under the code indicator.
+  Executable files must start with a shebang line.
 
-  `>-`  *Embedded file indicator, use >filename.something if you want to output to a specific file*  
-  `  #!/usr/bin/env python3`  *files starting with shebang are executed*  
-  `  print("Hello, world!")`  
-  `==`  *Output indicator, `weave` will overwrite its contents*  
-  `  Hello, world!`  *Weaved output*
+  ```
+  >-
+    #!/usr/bin/env python3
+    print("Hello, world! ", 1 + 2 + 3)
+  ==
+    Hello, world! 6
+  ```
