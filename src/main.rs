@@ -76,7 +76,15 @@ enum Commands {
     LintTags(IoArgs),
 
     /// List all tags in a collection.
-    ListTags(IoArgs),
+    ListTags {
+        /// Print incidence counts of each tag and sort tags by most common if
+        /// set.
+        #[arg(long)]
+        histogram: bool,
+
+        #[command(flatten)]
+        io: IoArgs,
+    },
 
     /// Rename a single tag in a collection.
     RenameTag {
@@ -257,7 +265,7 @@ fn main() -> Result<()> {
         LintTags(args) => {
             let io = IoPipe::try_from(args)?;
             let outline = io.read_outline()?;
-            let tags = get_tags(&outline);
+            let tags = tags(&outline).collect::<BTreeSet<String>>();
 
             // Collect sets of suspiciously similar tags.
             let mut typos: HashMap<String, Vec<String>> = HashMap::new();
@@ -304,15 +312,35 @@ fn main() -> Result<()> {
             Ok(())
         }
 
-        ListTags(args) => {
+        ListTags { histogram, io } => {
             use std::fmt::Write;
 
-            let io = IoPipe::try_from(args)?;
+            let io = IoPipe::try_from(io)?;
             let outline = io.read_outline()?;
-            let tags = get_tags(&outline);
+
             let mut out = String::new();
-            for tag in tags {
-                writeln!(out, "{}", tag)?;
+            if histogram {
+                let mut counts: HashMap<String, usize> = HashMap::new();
+                for tag in tags(&outline) {
+                    *counts.entry(tag).or_default() += 1;
+                }
+                let mut counts: Vec<(String, usize)> =
+                    counts.into_iter().collect();
+                // XXX: Wasteful cloning of tag names.
+                counts
+                    .sort_by_key(|(n, count)| (-(*count as i32), n.to_owned()));
+
+                let width =
+                    counts.iter().map(|(tag, _)| tag.len()).max().unwrap_or(0);
+
+                for (tag, count) in counts {
+                    writeln!(out, "{:width$}  {}", tag, count)?;
+                }
+            } else {
+                let tags = tags(&outline).collect::<BTreeSet<String>>();
+                for tag in tags {
+                    writeln!(out, "{}", tag)?;
+                }
             }
             io.write_text(&out)
         }
@@ -360,14 +388,11 @@ pub struct IoArgs {
     // collection to stdout. Haven't bothered to implement that yet though.
 }
 
-fn get_tags(outline: &Outline) -> BTreeSet<String> {
-    outline
-        .iter()
-        .flat_map(|s| {
-            s.body
-                .get::<Vec<String>>("tags")
-                .unwrap_or_default()
-                .unwrap_or_default()
-        })
-        .collect()
+fn tags(outline: &Outline) -> impl Iterator<Item = String> + '_ {
+    outline.iter().flat_map(|s| {
+        s.body
+            .get::<Vec<String>>("tags")
+            .unwrap_or_default()
+            .unwrap_or_default()
+    })
 }
