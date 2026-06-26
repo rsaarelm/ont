@@ -104,6 +104,13 @@ impl Cell {
             self.text = s;
         }
     }
+
+    fn clear_formula_output(&mut self) {
+        if let Some(formula) = &self.formula {
+            self.value = None;
+            self.text = format!(":{formula}");
+        }
+    }
 }
 
 impl Display for Cell {
@@ -248,10 +255,14 @@ impl Table {
     }
 
     /// Evalaute spreadsheet formulas in all cells and insert their results.
-    fn eval(&mut self) -> Result<()> {
+    fn eval(&mut self, clear_outputs: bool) -> Result<()> {
         for row in 0..self.cells.len() {
             for col in 0..self.cells[row].len() {
-                self.eval_cell(row, col)?;
+                if clear_outputs {
+                    self.cells[row][col].clear_formula_output();
+                } else {
+                    self.eval_cell(row, col)?;
+                }
             }
         }
         Ok(())
@@ -478,13 +489,14 @@ impl Display for Table {
 
 pub fn run(
     no_number_parsing: bool,
+    clear_outputs: bool,
     num_columns: usize,
     io: IoPipe,
 ) -> Result<()> {
     let outline = io.read_outline()?;
 
     let mut table = Table::new(&outline, num_columns, !no_number_parsing)?;
-    table.eval()?;
+    table.eval(clear_outputs)?;
     io.write_text(table.to_string())
 }
 

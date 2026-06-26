@@ -155,6 +155,11 @@ enum Commands {
         #[arg(long)]
         no_number_parsing: bool,
 
+        /// Clear output values from all spreadsheet cells, leaving only
+        /// formulas. Run this to make batch editing the formulas easier.
+        #[arg(long)]
+        clear_outputs: bool,
+
         /// How many columns to align, if set to 0, align every column
         /// shared by all nonempty rows.
         #[arg(long, default_value = "0")]
@@ -347,9 +352,12 @@ fn main() -> Result<()> {
 
         Tf {
             no_number_parsing,
+            clear_outputs: clear_cells,
             num_columns,
             io,
-        } => tf::run(no_number_parsing, num_columns, io.try_into()?),
+        } => {
+            tf::run(no_number_parsing, clear_cells, num_columns, io.try_into()?)
+        }
     }
 }
 
