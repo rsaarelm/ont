@@ -61,12 +61,23 @@ impl IoPipe {
     }
 
     pub fn write_text(&self, output: impl AsRef<str>) -> Result<()> {
-        if self.dest.to_str() == Some("-") {
-            print!("{}", output.as_ref());
-        } else if self.dest.is_dir() {
-            bail!("Cannot write text to a directory");
-        } else {
-            std::fs::write(&self.dest, output.as_ref())?;
+        let mut out: Box<dyn std::io::Write> =
+            if self.dest.to_str() == Some("-") {
+                // Return stdout as file
+                Box::new(std::io::stdout())
+            } else if self.dest.is_dir() {
+                bail!("Cannot write text to a directory");
+            } else {
+                // Open dest as file and return that
+                Box::new(std::fs::File::create(&self.dest)?)
+            };
+
+        for line in output.as_ref().lines() {
+            if line.trim().is_empty() {
+                writeln!(out)?
+            } else {
+                writeln!(out, "{}{}", self.stdin_prefix, line.trim_end())?;
+            }
         }
         Ok(())
     }
@@ -167,8 +178,7 @@ impl TryFrom<IoArgs> for IoPipe {
 
             Source::Stdin(input)
         } else if value.input.is_dir() {
-            let (outline, style, files) =
-                ont::read_directory(&value.input)?;
+            let (outline, style, files) = ont::read_directory(&value.input)?;
             Source::Collection {
                 path: value.input.clone(),
                 files,
