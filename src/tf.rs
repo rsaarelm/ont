@@ -188,8 +188,8 @@ impl Table {
             let word_starts: Vec<usize> = head
                 .char_indices()
                 .zip(once(' ').chain(head.chars()))
-                .filter_map(|((i, d), c)| {
-                    (c.is_whitespace() && !d.is_whitespace()).then_some(i)
+                .filter_map(|((i, c), prev)| {
+                    (prev.is_whitespace() && !c.is_whitespace()).then_some(i)
                 })
                 .collect();
 
