@@ -114,15 +114,19 @@ impl Display for Cell {
 
 #[derive(Default)]
 struct Table {
-    no_number_alignment: bool,
     columns: usize,
     cells: Vec<Vec<Cell>>,
 }
 
 impl Table {
-    fn new(outline: &Outline, num_columns: usize) -> Result<Self> {
+    /// Construct a new table from an outline with parsed cells and column
+    /// count.
+    fn new(
+        outline: &Outline,
+        num_columns: usize,
+        parse_numbers: bool,
+    ) -> Result<Self> {
         let mut table = Table {
-            no_number_alignment: false,
             columns: if num_columns == 0 {
                 usize::MAX
             } else {
@@ -192,10 +196,17 @@ impl Table {
             {
                 if i < table.columns {
                     // Keep pushing individual words while we have columns.
-                    row.push(head[a..b].parse()?);
+                    let cell = if parse_numbers {
+                        head[a..b].parse()?
+                    } else {
+                        // If number parsing is disabled, all cells are forced
+                        // to be text.
+                        Cell::text(head[a..b].trim())
+                    };
+                    row.push(cell);
                 } else {
                     // If there's still content left, push all of it to the extra
-                    // column that's forced to be a text cell.
+                    // column that's never numeric.
                     row.push(Cell::text(head[a..].trim()));
                     break;
                 }
@@ -209,6 +220,7 @@ impl Table {
         Ok(table)
     }
 
+    /// Return numeric cell values left of target as stack.
     fn stack(&self, row: usize, col: usize) -> Vec<f64> {
         if self.cells.len() < row {
             return Vec::new();
@@ -222,6 +234,7 @@ impl Table {
         ret
     }
 
+    /// Return numeric cell values above target as stack.
     fn vertical_stack(&self, row: usize, column: usize) -> Vec<f64> {
         let mut ret = Vec::new();
         for r in 0..row {
@@ -234,6 +247,7 @@ impl Table {
         ret
     }
 
+    /// Evalaute spreadsheet formulas in all cells and insert their results.
     fn eval(&mut self) -> Result<()> {
         for row in 0..self.cells.len() {
             for col in 0..self.cells[row].len() {
@@ -258,25 +272,29 @@ impl Table {
         };
 
         let mut s = self.stack(row, col);
+        let mut stack_length = s.len();
 
         // Flag that we switched to a vertical stack.
         let mut is_vertical = false;
 
         // Number literal accumulator.
-        let mut acc = 0.0;
+        let mut acc = f64::NAN;
 
         for c in formula.chars() {
+            // Number literal parsing, only natural numbers are supported.
             if c.is_ascii_digit() {
+                if acc.is_nan() {
+                    acc = 0.0;
+                }
+
                 // Accumulate digits into a number.
                 acc = acc * 10.0 + (c as u8 - b'0') as f64;
                 continue;
-            } else if acc != 0.0 {
-                // If we have an accumulated number, push it to the stack.
-                // XXX: Zero literals are currently be no-ops, but do you need
-                // them for anything anyway?
+            } else if !acc.is_nan() {
                 s.push(acc);
-                acc = 0.0;
+                acc = f64::NAN;
             }
+
             // Weird glyphs are inspired by uiua.
             match c {
                 '+' => {
@@ -290,7 +308,7 @@ impl Table {
                     let b = pop(&mut s)?;
                     s.push(b - a);
                 }
-                '%' => {
+                '%' | '÷' => {
                     // Division
                     let a = pop(&mut s)?;
                     let b = pop(&mut s)?;
@@ -301,7 +319,7 @@ impl Table {
                     let val = pop(&mut s)? * pop(&mut s)?;
                     s.push(val);
                 }
-                '.' => {
+                '·' => {
                     // Drop stack item
                     pop(&mut s)?;
                 }
@@ -311,20 +329,37 @@ impl Table {
                     s.push(val.round());
                 }
                 '#' => {
-                    // Stack length
-                    s.push(s.len() as f64);
+                    // Initial stack length.
+                    // We generally never want the length of the stack after
+                    // we've started operating on it, so this returns a cached
+                    // value from when the stack was initialized.
+                    s.push(stack_length as f64);
                 }
-                'Σ' => {
+                '√' => {
+                    // Square root
+                    let val = pop(&mut s)?;
+                    s.push(val.sqrt());
+                }
+                // If we had reduce (/), sum and product would be shorthand
+                // for /+ and /*
+                'Σ' | 'S' => {
                     // Stack sum
                     let sum: f64 = s.iter().sum();
                     s.clear();
                     s.push(sum);
                 }
-                'v' => {
+                'Π' => {
+                    // Stack product
+                    let prod: f64 = s.iter().product();
+                    s.clear();
+                    s.push(prod);
+                }
+                'v' | '↓' => {
                     // Switch to vertical stack (only works once)
                     if !is_vertical {
                         is_vertical = true;
                         s = self.vertical_stack(row, col);
+                        stack_length = s.len();
                     }
                 }
 
@@ -344,9 +379,6 @@ impl Table {
 
 impl Display for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Which columns are numeric.
-        let mut numeric_columns = vec![false; self.columns + 1];
-
         // (left-padding, right-padding) needed by each column.
         let mut column_extents = Vec::new();
 
@@ -355,32 +387,27 @@ impl Display for Table {
         // The optional final +1 column is never numeric and doesn't need any
         // padding, so the iteration skips it.
         for i in 0..self.columns {
-            if self.no_number_alignment {
-                break;
-            }
-
-            numeric_columns[i] = true;
-            for row in &self.cells {
-                let Some(c) = row.get(i) else { continue };
-                if !c.is_numeric() {
-                    numeric_columns[i] = false;
-                    break;
-                }
-            }
-
             let (mut left_extent, mut right_extent) = (0, 0);
             for row in &self.cells {
                 let Some(c) = row.get(i) else { continue };
-                if numeric_columns[i] {
-                    let left_extension = c.left_extension();
+                let left_extension = c.left_extension();
 
-                    left_extent = left_extent.max(left_extension);
-                    right_extent = right_extent.max(c.len() - left_extension);
-                } else {
-                    right_extent = right_extent.max(c.len());
-                }
+                left_extent = left_extent.max(left_extension);
             }
 
+            // Non-numeric values will be left-alinged at the maximum left
+            // extension.
+            for row in &self.cells {
+                let Some(c) = row.get(i) else { continue };
+                let right_extension = if c.is_numeric() {
+                    let left_extension = c.left_extension();
+                    c.len() - left_extension
+                } else {
+                    c.len() - left_extent
+                };
+
+                right_extent = right_extent.max(right_extension);
+            }
             column_extents.push((left_extent, right_extent));
         }
 
@@ -399,18 +426,19 @@ impl Display for Table {
                 }
 
                 let (left_pos, right_pos) = column_extents[i];
-                let left_extent = if numeric_columns[i] {
+                let left_extent = if c.is_numeric() {
                     c.left_extension()
                 } else {
-                    0
+                    left_pos
                 };
+
                 let right_extent = c.len() - left_extent;
 
+                // Pad to meet left pos. To stay IDM-compatible, the leftmost
+                // column needs to be padded with NBSPs (\u{00A0}) that don't read as
+                // whitespace to IDM.
                 if left_extent < left_pos {
                     if i == 0 {
-                        // IDM does not like an uneven left edge, but only sees
-                        // ASCII whitespace, so use NBSP as false whitespace for
-                        // left-padding the leftmost column.
                         write!(
                             f,
                             "{:\u{00A0}^width$}",
@@ -455,8 +483,7 @@ pub fn run(
 ) -> Result<()> {
     let outline = io.read_outline()?;
 
-    let mut table = Table::new(&outline, num_columns)?;
-    table.no_number_alignment = no_number_parsing;
+    let mut table = Table::new(&outline, num_columns, !no_number_parsing)?;
     table.eval()?;
     io.write_text(table.to_string())
 }
