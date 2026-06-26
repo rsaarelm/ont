@@ -24,7 +24,7 @@ impl FromStr for Cell {
         let mut formula = None;
         let mut value = None;
 
-        if let Some((val, form)) = s.split_once(':') {
+        if let Some((val, form)) = s.split_once(',') {
             if let Ok(val) = val.parse::<f64>() {
                 value = Some(val);
                 formula = Some(form.to_string());
@@ -98,7 +98,7 @@ impl Cell {
         self.value = Some(value);
         let s = format_float(value);
         if let Some(formula) = &self.formula {
-            self.text = format!("{s}:{formula}");
+            self.text = format!("{s},{formula}");
         } else {
             // Would we ever be assigning to a non-formula cell?
             self.text = s;
@@ -108,7 +108,7 @@ impl Cell {
     fn clear_formula_output(&mut self) {
         if let Some(formula) = &self.formula {
             self.value = None;
-            self.text = format!(":{formula}");
+            self.text = format!(",{formula}");
         }
     }
 }
