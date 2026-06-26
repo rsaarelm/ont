@@ -495,7 +495,7 @@ fn pop(stack: &mut Vec<f64>) -> Result<f64> {
 }
 
 fn format_float(x: f64) -> String {
-    let s = x.to_string();
+    let mut s = x.to_string();
 
     // If we ended up with lots of decimals, truncate to 3, YAGNI more.
 
@@ -503,8 +503,12 @@ fn format_float(x: f64) -> String {
     let d = d.split('.').nth(1).unwrap_or(""); // Get decimal part.
 
     if d.len() > 3 {
-        format!("{:.3}", x)
-    } else {
-        s
+        s = format!("{:.3}", x);
+        // Remove trailing zeroes
+        while s.ends_with('0') {
+            s.pop();
+        }
     }
+
+    s
 }
