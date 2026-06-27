@@ -593,20 +593,20 @@ impl NumberValue {
     /// Construct a new NumberValue with scientific notation in
     /// representation.
     pub fn scientific(val: f64) -> Self {
-        let s = format!("{val:.3e}");
+        let s = format!("{val:.2e}");
         let (n, e) = decompose_float(&s);
         NumberValue(val, format!("{n}{e}"))
     }
 
     /// Construct a new NumberValue with pretty-printed string representation.
     pub fn new(val: f64) -> Self {
-        let s = if 1e-2 > val.abs() && val.abs() > 1e-14 {
+        let s = if 0.01 > val.abs() && val.abs() > 1e-14 {
             // Always format small nonzero numbers in sci notation.
-            format!("{val:.3e}")
+            format!("{val:.2e}")
         } else {
-            // Otherwise do normal number, but only have max three decimal
+            // Otherwise do normal number, but only have max two decimal
             // precision, YAGNI more.
-            format!("{val:.3}")
+            format!("{val:.2}")
         };
         let (n, e) = decompose_float(&s);
         NumberValue(val, format!("{n}{e}"))
@@ -675,7 +675,7 @@ mod tests {
     fn test_number_value() {
         let n = NumberValue::new(123.456789);
         assert_eq!(n.val(), 123.456789);
-        assert_eq!(n.as_str(), "123.457");
+        assert_eq!(n.as_str(), "123.46");
 
         let n2 = NumberValue::new(1.0);
         assert_eq!(n2.val(), 1.0);
@@ -686,7 +686,7 @@ mod tests {
 
         let n3 = NumberValue::new(0.000123456);
         assert_eq!(n3.val(), 0.000123456);
-        assert_eq!(n3.as_str(), "1.235e-4");
+        assert_eq!(n3.as_str(), "1.23e-4");
 
         let n3 = NumberValue::new(0.999999);
         assert_eq!(n3.val(), 0.999999);
