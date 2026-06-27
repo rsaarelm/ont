@@ -61,6 +61,39 @@ Some of the current ones:
 
 * `tf`: Format a block of tabular IDM into nicely lined-up columns, try to
   align all-numeric columns to the right instead of to the left.
+  Pipe an unformatted table block through `ont tf` to get a formatted table.
+
+  `tf` can also do simple spreadsheet calculations with tacit programming style formulas appended to cells.
+  Append a formula computing on the row left of the formula cell with `,` and a formula computing on the column above the formula cell with `^`.
+  Formulas treat the values as a RPN stack and use operators somewhat inspired by [Uiua](https://www.uiua.org/) language.
+
+  For example to compute BMIs of several people and then the average, you can square the last value with `²` and then divide the previous value with the resulting value with `%`.
+  You can compute the sum of the entire input (row or column) with `Σ` and get the number of input elements with `#`.
+  This lets you compute a column's average with `^Σ#%`.
+
+  So you write the raw table:
+
+  ```
+  -- weight height BMI
+  Alice 78 1.70 ,²%
+  Bob 80 1.80 ,²%
+  Carol 55 1.60 ,²%
+
+  -- - avg: ^Σ#%
+  ```
+
+  And pipe it through `ont tf` to get the computed values filled in and everything aligned:
+
+  ```
+  --     weight  height  BMI
+  Alice  78      1.70    26.99,²%
+  Bob    80      1.80    24.69,²%
+  Carol  55      1.60    21.48,²%
+
+  --     -       avg:    24.39^Σ#%
+  ```
+
+  The set of operations for the formulas is not very stable yet, see the [source code](src/tf.rs#:~:text=fn%20eval) for the current set.
 
 * `import-raindrop` and `export-raindrop`: Convert CSV export from [raindrop.io](https://raindrop.io/) bookmark manager to IDM notes
   and convert an IDM bookmark list to a Raindrop import CSV.
