@@ -121,8 +121,8 @@ pub fn normalized_url(url: &str) -> String {
     }
 
     // Force everything to https.
-    if url.starts_with("http://") {
-        format!("https://{}", &url[7..])
+    if let Some(suffix) = url.strip_prefix("http://") {
+        format!("https://{suffix}")
     } else {
         url.to_string()
     }

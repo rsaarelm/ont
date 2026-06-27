@@ -65,7 +65,7 @@ pub fn export(io: IoPipe, folder: impl AsRef<str>) -> Result<()> {
     let mut buf = Vec::new();
     {
         let mut wtr = csv::Writer::from_writer(&mut buf);
-        wtr.write_record(&[
+        wtr.write_record([
             "url", "folder", "title", "tags", "created", "note",
         ])?;
 
