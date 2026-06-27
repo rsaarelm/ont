@@ -351,6 +351,24 @@ impl Table {
                     let val = pop(&mut s)?;
                     s.push(val.sqrt());
                 }
+                '~' => {
+                    // Swap top elements
+                    let a = pop(&mut s)?;
+                    let b = pop(&mut s)?;
+                    s.push(a);
+                    s.push(b);
+                }
+                '.' => {
+                    // Duplicate top element
+                    let a = pop(&mut s)?;
+                    s.push(a);
+                    s.push(a);
+                }
+                '²' => {
+                    // Square top element
+                    let a = pop(&mut s)?;
+                    s.push(a * a);
+                }
                 // If we had reduce (/), sum and product would be shorthand
                 // for /+ and /*
                 'Σ' | 'S' => {
