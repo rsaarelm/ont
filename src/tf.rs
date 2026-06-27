@@ -1,4 +1,9 @@
-use std::{fmt::Display, iter::once, str::FromStr};
+use std::{
+    fmt::Display,
+    iter::once,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 use anyhow::{bail, Result};
 use itertools::Itertools;
@@ -6,117 +11,17 @@ use ont::Outline;
 
 use crate::IoPipe;
 
-#[derive(Clone, Default)]
-struct Cell {
-    text: String,
-    value: Option<f64>,
-    formula: Option<String>,
-}
+pub fn run(
+    no_number_parsing: bool,
+    clear_outputs: bool,
+    num_columns: usize,
+    io: IoPipe,
+) -> Result<()> {
+    let outline = io.read_outline()?;
 
-impl FromStr for Cell {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-
-        let text = s.to_string();
-
-        let mut formula = None;
-        let mut value = None;
-
-        if let Some((val, form)) = s.split_once(',') {
-            if let Ok(val) = val.parse::<f64>() {
-                value = Some(val);
-                formula = Some(form.to_string());
-            } else if val.is_empty() {
-                value = Some(0.0);
-                formula = Some(form.to_string());
-            } else {
-                // It's not a valid formula cell...
-                // Treat it as text cell.
-            }
-        } else if let Ok(val) = s.parse::<f64>() {
-            // No formula, but it's a valid number.
-            value = Some(val);
-        } else if s == "-" {
-            // Missing value indicator, treating these as zeroes for now.
-            value = Some(0.0);
-        }
-
-        Ok(Cell {
-            text,
-            value,
-            formula,
-        })
-    }
-}
-
-impl Cell {
-    /// Constructor that forces a text cell.
-    fn text(text: impl Into<String>) -> Self {
-        Cell {
-            text: text.into(),
-            value: None,
-            formula: None,
-        }
-    }
-
-    fn is_numeric(&self) -> bool {
-        self.value.is_some()
-    }
-
-    fn len(&self) -> usize {
-        self.text.len()
-    }
-
-    fn value_str(&self) -> &str {
-        match (self.value, &self.formula) {
-            (Some(_), Some(f)) => &self.text[0..self.text.len() - f.len() - 1],
-            (Some(_), None) => &self.text,
-            (None, _) => "",
-        }
-    }
-
-    /// Find how much the cell must be shifted to the left so it'll align with
-    /// other numbers at the exponent marker or the decimal point.
-    fn left_extension(&self) -> usize {
-        let s = self.value_str();
-
-        if let Some(pos) = s.find('e') {
-            pos // Try to align by exponent marker first,
-        } else if let Some(pos) = s.find('.') {
-            pos // then by the decimal point,
-        } else {
-            // Otherwise use the whole number string length. If this is a text
-            // cell, value_str will be empty and we get 0 here, which is
-            // correct because text cells are left-aligned.
-            s.len()
-        }
-    }
-
-    fn assign(&mut self, value: f64) {
-        self.value = Some(value);
-        let s = format_float(value);
-        if let Some(formula) = &self.formula {
-            self.text = format!("{s},{formula}");
-        } else {
-            // Would we ever be assigning to a non-formula cell?
-            self.text = s;
-        }
-    }
-
-    fn clear_formula_output(&mut self) {
-        if let Some(formula) = &self.formula {
-            self.value = None;
-            self.text = format!(",{formula}");
-        }
-    }
-}
-
-impl Display for Cell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text)
-    }
+    let mut table = Table::new(&outline, num_columns, !no_number_parsing)?;
+    table.eval(clear_outputs)?;
+    io.write_text(table.to_string())
 }
 
 #[derive(Default)]
@@ -227,39 +132,14 @@ impl Table {
         Ok(table)
     }
 
-    /// Return numeric cell values left of target as stack.
-    fn stack(&self, row: usize, col: usize) -> Vec<f64> {
-        if self.cells.len() < row {
-            return Vec::new();
-        }
-        // Add only numeric cells to stack.
-        let ret: Vec<f64> = self.cells[row]
-            .iter()
-            .take(col)
-            .filter_map(|c| c.value)
-            .collect();
-        ret
-    }
-
-    /// Return numeric cell values above target as stack.
-    fn vertical_stack(&self, row: usize, column: usize) -> Vec<f64> {
-        let mut ret = Vec::new();
-        for r in 0..row {
-            if let Some(c) = self.cells.get(r).and_then(|row| row.get(column)) {
-                if let Some(v) = c.value {
-                    ret.push(v);
-                }
-            }
-        }
-        ret
-    }
-
     /// Evalaute spreadsheet formulas in all cells and insert their results.
     fn eval(&mut self, clear_outputs: bool) -> Result<()> {
         for row in 0..self.cells.len() {
             for col in 0..self.cells[row].len() {
                 if clear_outputs {
-                    self.cells[row][col].clear_formula_output();
+                    if self.cells[row][col].is_formula() {
+                        self.cells[row][col].assign(NumberValue::empty());
+                    }
                 } else {
                     self.eval_cell(row, col)?;
                 }
@@ -278,15 +158,29 @@ impl Table {
             return Ok(());
         };
 
-        let Some(formula) = &c.formula else {
-            return Ok(());
+        // Construct the stack and extract the formula string. The formula
+        // marker indicates whether we build a horizontal (from the table row
+        // before current cell) or vertical (from the table column above
+        // current cell) stack.
+        let (mut s, formula) = match c {
+            Cell::HorizontalFormula(_, ref f) => {
+                (Stack::horizontal(self, row, col), f)
+            }
+            Cell::VerticalFormula(_, ref f) => {
+                (Stack::vertical(self, row, col), f)
+            }
+            _ => return Ok(()),
         };
 
-        let mut s = self.stack(row, col);
-        let mut stack_length = s.len();
+        // Must have some stack values to evaluate the formula.
+        if s.is_empty() {
+            self.cells[row][col].assign(NumberValue::empty());
+            return Ok(());
+        }
 
-        // Flag that we switched to a vertical stack.
-        let mut is_vertical = false;
+        // Initial stack length, does not change even though formula
+        // evaluation may consume and emit stack values.
+        let stack_length = s.len();
 
         // Number literal accumulator.
         let mut acc = f64::NAN;
@@ -310,33 +204,33 @@ impl Table {
             match c {
                 '+' => {
                     // Addition
-                    let val = pop(&mut s)? + pop(&mut s)?;
+                    let val = s.pop()? + s.pop()?;
                     s.push(val);
                 }
                 '-' => {
                     // Subtraction
-                    let a = pop(&mut s)?;
-                    let b = pop(&mut s)?;
+                    let a = s.pop()?;
+                    let b = s.pop()?;
                     s.push(b - a);
                 }
                 '%' | '÷' => {
                     // Division
-                    let a = pop(&mut s)?;
-                    let b = pop(&mut s)?;
+                    let a = s.pop()?;
+                    let b = s.pop()?;
                     s.push(b / a);
                 }
-                'x' => {
+                '*' | '×' => {
                     // Multiplication
-                    let val = pop(&mut s)? * pop(&mut s)?;
+                    let val = s.pop()? * s.pop()?;
                     s.push(val);
                 }
                 '·' => {
                     // Drop stack item
-                    pop(&mut s)?;
+                    s.pop()?;
                 }
                 '⁅' => {
                     // Round to nearest integer.
-                    let val = pop(&mut s)?;
+                    let val = s.pop()?;
                     s.push(val.round());
                 }
                 '#' => {
@@ -348,30 +242,30 @@ impl Table {
                 }
                 '√' => {
                     // Square root
-                    let val = pop(&mut s)?;
+                    let val = s.pop()?;
                     s.push(val.sqrt());
                 }
                 '~' => {
                     // Swap top elements
-                    let a = pop(&mut s)?;
-                    let b = pop(&mut s)?;
+                    let a = s.pop()?;
+                    let b = s.pop()?;
                     s.push(a);
                     s.push(b);
                 }
                 '.' => {
                     // Duplicate top element
-                    let a = pop(&mut s)?;
+                    let a = s.pop()?;
                     s.push(a);
                     s.push(a);
                 }
                 '²' => {
                     // Square top element
-                    let a = pop(&mut s)?;
+                    let a = s.pop()?;
                     s.push(a * a);
                 }
                 // If we had reduce (/), sum and product would be shorthand
                 // for /+ and /*
-                'Σ' | 'S' => {
+                'Σ' => {
                     // Stack sum
                     let sum: f64 = s.iter().sum();
                     s.clear();
@@ -383,62 +277,47 @@ impl Table {
                     s.clear();
                     s.push(prod);
                 }
-                'v' | '↓' => {
-                    // Switch to vertical stack (only works once)
-                    if !is_vertical {
-                        is_vertical = true;
-                        s = self.vertical_stack(row, col);
-                        stack_length = s.len();
-                    }
-                }
 
                 c => {
                     bail!("tf: Unsupported formula character '{c}' at ({row}, {col})")
                 }
             }
         }
-        if let Some(result) = s.pop() {
+        if let Some(result) = s.top() {
             self.cells[row][col].assign(result);
         } else {
             bail!("tf: Stack underflow at ({row}, {col})")
         }
         Ok(())
     }
+
+    fn column(&self, col: usize) -> impl Iterator<Item = &Cell> + '_ {
+        self.cells.iter().filter_map(move |row| row.get(col))
+    }
 }
 
 impl Display for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // (left-padding, right-padding) needed by each column.
-        let mut column_extents = Vec::new();
+        // Each column's maximum left extension value.
+        let left_extents = (0..self.columns)
+            .map(|i| {
+                self.column(i)
+                    .map(|c| c.left_extension())
+                    .max()
+                    .unwrap_or(0)
+            })
+            .collect::<Vec<_>>();
 
-        // Figure out column widths.
-
-        // The optional final +1 column is never numeric and doesn't need any
-        // padding, so the iteration skips it.
-        for i in 0..self.columns {
-            let (mut left_extent, mut right_extent) = (0, 0);
-            for row in &self.cells {
-                let Some(c) = row.get(i) else { continue };
-                let left_extension = c.left_extension();
-
-                left_extent = left_extent.max(left_extension);
-            }
-
-            // Non-numeric values will be left-alinged at the maximum left
-            // extension.
-            for row in &self.cells {
-                let Some(c) = row.get(i) else { continue };
-                let right_extension = if c.is_numeric() {
-                    let left_extension = c.left_extension();
-                    c.len() - left_extension
-                } else {
-                    c.len() - left_extent
-                };
-
-                right_extent = right_extent.max(right_extension);
-            }
-            column_extents.push((left_extent, right_extent));
-        }
+        // Total width for each column
+        let column_widths = (0..self.columns)
+            .map(|i| {
+                self.column(i)
+                    .map(|c| c.column_indent(left_extents[i]) + c.len())
+                    .max()
+                    .unwrap_or(0)
+                    + 2 // The 2-space gap between columns
+            })
+            .collect::<Vec<_>>();
 
         // Print the table.
         for row in &self.cells {
@@ -454,47 +333,27 @@ impl Display for Table {
                     continue;
                 }
 
-                let (left_pos, right_pos) = column_extents[i];
-                let left_extent = if c.is_numeric() {
-                    c.left_extension()
-                } else {
-                    left_pos
-                };
-
-                let right_extent = c.len() - left_extent;
+                let indent = c.column_indent(left_extents[i]);
 
                 // Pad to meet left pos. To stay IDM-compatible, the leftmost
                 // column needs to be padded with NBSPs (\u{00A0}) that don't read as
                 // whitespace to IDM.
-                if left_extent < left_pos {
+                if indent > 0 {
                     if i == 0 {
-                        write!(
-                            f,
-                            "{:\u{00A0}^width$}",
-                            "",
-                            width = left_pos - left_extent
-                        )?;
+                        write!(f, "{:\u{00A0}^indent$}", "",)?;
                     } else {
                         // Otherwise use spaces.
-                        write!(
-                            f,
-                            "{: ^width$}",
-                            "",
-                            width = left_pos - left_extent
-                        )?;
+                        write!(f, "{: ^indent$}", "",)?;
                     }
                 }
 
                 write!(f, "{c}")?;
 
+                let right_pad = column_widths[i] - indent - c.len();
+
                 // Right-padding and space between columns.
                 if i < row.len() - 1 {
-                    write!(
-                        f,
-                        "{: <width$}",
-                        "",
-                        width = right_pos - right_extent + 2
-                    )?;
+                    write!(f, "{: <right_pad$}", "",)?;
                 }
             }
 
@@ -505,40 +364,360 @@ impl Display for Table {
     }
 }
 
-pub fn run(
-    no_number_parsing: bool,
-    clear_outputs: bool,
-    num_columns: usize,
-    io: IoPipe,
-) -> Result<()> {
-    let outline = io.read_outline()?;
-
-    let mut table = Table::new(&outline, num_columns, !no_number_parsing)?;
-    table.eval(clear_outputs)?;
-    io.write_text(table.to_string())
+struct Stack {
+    stack: Vec<f64>,
+    is_scientific: bool,
 }
 
-fn pop(stack: &mut Vec<f64>) -> Result<f64> {
-    stack
-        .pop()
-        .ok_or_else(|| anyhow::anyhow!("Stack underflow"))
-}
+impl Stack {
+    fn horizontal(table: &Table, row: usize, col: usize) -> Self {
+        let mut is_scientific = false;
+        let mut stack = Vec::new();
 
-fn format_float(x: f64) -> String {
-    let mut s = x.to_string();
+        if let Some(row) = table.cells.get(row) {
+            for c in row.iter().take(col) {
+                let Some(val) = c.value() else {
+                    continue;
+                };
 
-    // If we ended up with lots of decimals, truncate to 3, YAGNI more.
+                if val.is_scientific() {
+                    is_scientific = true;
+                }
+                stack.push(val.val());
+            }
+        }
 
-    let d = s.split('e').next().unwrap_or(&s); // Trim out exponent.
-    let d = d.split('.').nth(1).unwrap_or(""); // Get decimal part.
-
-    if d.len() > 3 {
-        s = format!("{:.3}", x);
-        // Remove trailing zeroes
-        while s.ends_with('0') {
-            s.pop();
+        Stack {
+            stack,
+            is_scientific,
         }
     }
 
-    s
+    fn vertical(table: &Table, row: usize, col: usize) -> Self {
+        let mut is_scientific = false;
+        let mut stack = Vec::new();
+
+        for r in 0..row {
+            if let Some(c) = table.cells.get(r).and_then(|row| row.get(col)) {
+                let Some(val) = c.value() else {
+                    continue;
+                };
+
+                if val.is_scientific() {
+                    is_scientific = true;
+                }
+                stack.push(val.val());
+            }
+        }
+
+        Stack {
+            stack,
+            is_scientific,
+        }
+    }
+
+    fn pop(&mut self) -> Result<f64> {
+        self.stack
+            .pop()
+            .ok_or_else(|| anyhow::anyhow!("Stack underflow"))
+    }
+
+    fn top(&self) -> Option<NumberValue> {
+        if let Some(&val) = self.stack.last() {
+            if self.is_scientific {
+                Some(NumberValue::scientific(val))
+            } else {
+                Some(NumberValue::new(val))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Deref for Stack {
+    type Target = Vec<f64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stack
+    }
+}
+
+impl DerefMut for Stack {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stack
+    }
+}
+
+#[derive(Clone, Debug)]
+enum Cell {
+    Text(String),
+    Num(NumberValue),
+    VerticalFormula(NumberValue, String),
+    HorizontalFormula(NumberValue, String),
+}
+use Cell::*;
+
+impl FromStr for Cell {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        if let Some((val, form)) = s.split_once(',') {
+            if let Ok(val) = val.parse::<NumberValue>() {
+                return Ok(HorizontalFormula(val, form.to_string()));
+            } else if val.is_empty() {
+                return Ok(HorizontalFormula(
+                    NumberValue::empty(),
+                    form.to_string(),
+                ));
+            }
+        } else if let Some((val, form)) = s.split_once('^') {
+            if let Ok(val) = val.parse::<NumberValue>() {
+                return Ok(VerticalFormula(val, form.to_string()));
+            } else if val.is_empty() {
+                return Ok(VerticalFormula(
+                    NumberValue::empty(),
+                    form.to_string(),
+                ));
+            }
+        } else if let Ok(val) = s.parse::<NumberValue>() {
+            return Ok(Num(val));
+        }
+        Ok(Text(s.to_string()))
+    }
+}
+
+impl Cell {
+    /// Force a text cell, even if the string looks like a number or formula.
+    fn text(s: impl Into<String>) -> Self {
+        Cell::Text(s.into())
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Text(s) => s.len(),
+            Num(n) => n.as_str().len(),
+            VerticalFormula(n, form) => n.as_str().len() + 1 + form.len(),
+            HorizontalFormula(n, form) => n.as_str().len() + 1 + form.len(),
+        }
+    }
+
+    /// How much should this cell be indented when printed to a column wtih
+    /// the given maximum left extent.
+    fn column_indent(&self, max_left_extent: usize) -> usize {
+        if !self.is_numeric() {
+            return 0;
+        }
+        let left_extent = self.left_extension();
+        assert!(left_extent <= max_left_extent);
+        max_left_extent - left_extent
+    }
+
+    fn is_numeric(&self) -> bool {
+        !matches!(self, Cell::Text(_))
+    }
+
+    fn value(&self) -> Option<&NumberValue> {
+        match self {
+            Text(_) => None,
+            Num(ref n)
+            | VerticalFormula(ref n, _)
+            | HorizontalFormula(ref n, _) => Some(n),
+        }
+    }
+
+    fn is_formula(&self) -> bool {
+        matches!(self, VerticalFormula(_, _) | HorizontalFormula(_, _))
+    }
+
+    fn assign(&mut self, val: NumberValue) {
+        match self {
+            VerticalFormula(n, _) | HorizontalFormula(n, _) => {
+                *n = val;
+            }
+            cell => {
+                *cell = Cell::Num(val);
+            }
+        }
+    }
+
+    /// Find how much the cell must be shifted to the left so it'll align with
+    /// other numbers at the exponent marker or the decimal point. Returns 0
+    /// for text cells.
+    fn left_extension(&self) -> usize {
+        let num_part = match self {
+            Text(_) => return 0,
+            Num(n) | VerticalFormula(n, _) | HorizontalFormula(n, _) => {
+                n.as_str()
+            }
+        };
+
+        if let Some(pos) = num_part.find('e') {
+            pos // Try to align by exponent marker first,
+        } else if let Some(pos) = num_part.find('.') {
+            pos // then by the decimal point,
+        } else {
+            // Otherwise use the whole number string length.
+            num_part.len()
+        }
+    }
+}
+
+impl Display for Cell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Text(s) => write!(f, "{s}"),
+            Num(n) => write!(f, "{n}"),
+            VerticalFormula(n, form) => write!(f, "{n}^{form}"),
+            HorizontalFormula(n, form) => write!(f, "{n},{form}"),
+        }
+    }
+}
+
+/// Value for numbers that stores the original string representation.
+#[derive(Clone, Debug)]
+struct NumberValue(f64, String);
+
+impl FromStr for NumberValue {
+    type Err = std::num::ParseFloatError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = s.parse::<f64>()?;
+        Ok(NumberValue(val, s.to_string()))
+    }
+}
+
+impl NumberValue {
+    /// Construct a new NumberValue with scientific notation in
+    /// representation.
+    pub fn scientific(val: f64) -> Self {
+        let s = format!("{val:.3e}");
+        let (n, e) = decompose_float(&s);
+        NumberValue(val, format!("{n}{e}"))
+    }
+
+    /// Construct a new NumberValue with pretty-printed string representation.
+    pub fn new(val: f64) -> Self {
+        let s = if 1e-2 > val.abs() && val.abs() > 1e-14 {
+            // Always format small nonzero numbers in sci notation.
+            format!("{val:.3e}")
+        } else {
+            // Otherwise do normal number, but only have max three decimal
+            // precision, YAGNI more.
+            format!("{val:.3}")
+        };
+        let (n, e) = decompose_float(&s);
+        NumberValue(val, format!("{n}{e}"))
+    }
+
+    pub fn is_scientific(&self) -> bool {
+        self.1.contains('e')
+    }
+
+    /// Construct a special NumberValue that evaluates to 0.0 and prints an
+    /// empty string.
+    pub fn empty() -> Self {
+        // This is formally the default value for the type, but it's not
+        // declared as Default implementation because printing an empty string
+        // is something that should be explicit.
+        NumberValue(0.0, String::new())
+    }
+
+    pub fn val(&self) -> f64 {
+        self.0
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.1
+    }
+}
+
+impl Display for NumberValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.1)
+    }
+}
+
+/// Split float into truncated decimal part and exponent part.
+///
+/// "1.234e5" => "1.234", "e5"
+/// "1.200e4" => "1.2", "e4" (strip trailing zeroes from float part)
+/// "1.000" => "1", "" (strip trailing dot if all decimals are gone)
+fn decompose_float(repr: &str) -> (&str, &str) {
+    if let Some(pos) = repr.find('e') {
+        let (float_part, exp_part) = repr.split_at(pos);
+        let float_part = float_part.trim_end_matches('0').trim_end_matches('.');
+        (float_part, exp_part)
+    } else {
+        let float_part = repr.trim_end_matches('0').trim_end_matches('.');
+        (float_part, "")
+    }
+}
+
+// Unit tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    fn tf(input: &str, expected: &str) {
+        let outline = idm::from_str(input).unwrap();
+        let mut table = Table::new(&outline, 0, true).unwrap();
+        table.eval(false).unwrap();
+        let output = table.to_string();
+        assert_eq!(output.trim(), expected.trim());
+    }
+
+    #[test]
+    fn test_number_value() {
+        let n = NumberValue::new(123.456789);
+        assert_eq!(n.val(), 123.456789);
+        assert_eq!(n.as_str(), "123.457");
+
+        let n2 = NumberValue::new(1.0);
+        assert_eq!(n2.val(), 1.0);
+        assert_eq!(n2.as_str(), "1");
+
+        let n2 = NumberValue::new(6.674e-11 * 5.972e24 / 6.371e6 / 6.371e6);
+        assert_eq!(n2.as_str(), "9.82");
+
+        let n3 = NumberValue::new(0.000123456);
+        assert_eq!(n3.val(), 0.000123456);
+        assert_eq!(n3.as_str(), "1.235e-4");
+
+        let n3 = NumberValue::new(0.999999);
+        assert_eq!(n3.val(), 0.999999);
+        assert_eq!(n3.as_str(), "1");
+    }
+
+    #[test]
+    fn basic_tables() {
+        tf(
+            "\
+1 2 3
+4 5 6",
+            "\
+1  2  3
+4  5  6",
+        );
+
+        tf(
+            "\
+a b c d
+- 123 - -
+e f g h",
+            "\
+a  b    c  d
+-  123  -  -
+e  f    g  h",
+        );
+
+        // Scientific contagion
+        tf("1000000 2000000 ,*", "1000000  2000000  2000000000000,*");
+
+        tf("1e10 2e10 ,*", "1e10  2e10  2e20,*");
+    }
 }

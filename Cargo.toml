@@ -26,3 +26,6 @@ nom = "8"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3"
+
+[dev-dependencies]
+pretty_assertions = "1"
