@@ -18,13 +18,13 @@ derive_more = { version = "2", features = ["deref", "deref_mut"] }
 env_logger = "0.11"
 idm = "0.4"
 indexmap = { version = "2", features = ["serde"] }
-itertools = "0.14"
+itertools = "0.15"
 lazy-regex = "3"
 levenshtein = "1"
 log = "0.4"
 nom = "8"
 serde = { version = "1", features = ["derive"] }
-sha2 = "0.10"
+sha2 = "0.11"
 tempfile = "3"
 
 [dev-dependencies]
