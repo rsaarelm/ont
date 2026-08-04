@@ -19,7 +19,13 @@ pub fn rename(io: IoPipe, old: String, new: String) -> Result<()> {
         }
     }
 
-    eprintln!("Renamed {item_count} tags");
+    if item_count == 0 {
+        eprintln!("No tags '{old}' found.");
+    } else if item_count == 1 {
+        eprintln!("Renamed 1 tag.");
+    } else {
+        eprintln!("Renamed {item_count} tags.");
+    }
 
     io.write(&outline)
 }
