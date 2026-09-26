@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::Read,
     os::unix::fs::PermissionsExt,
@@ -9,8 +9,8 @@ use std::{
 
 use anyhow::{bail, Result};
 use base64::prelude::*;
-use ont::{Outline, Section};
 use lazy_regex::regex;
+use ont::{Outline, Section};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -33,20 +33,27 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
 
     let mut scripts = HashMap::new();
 
+    let mut external_files = HashSet::new();
+
     for (i, (entered_script, s)) in outline.context_iter(false).enumerate() {
+        // Short-circuit the inner iteration where we have actually entered
+        // the script part of the outline. Script parsing happened before
+        // this.
         if *entered_script || weave_filename(&s.head).is_some() {
             *entered_script = true;
             continue;
         }
 
+        // Look at the children of the current node for script objects. These
+        // are collected.
         for (j, s) in s.body.children.iter().enumerate() {
-            let Ok(script) = Script::try_from(s) else {
-                continue;
-            };
-
-            // Save at child index + 1 since we'll be matching against the
-            // output marker that's just under the script section next.
-            scripts.insert((i, j + 1), script);
+            if let Ok(script) = Script::try_from(s) {
+                // Save at child index + 1 since we'll be matching against the
+                // output marker that's just under the script section next.
+                scripts.insert((i, j + 1), script);
+            } else if let Ok(external) = ExternalFile::try_from(s) {
+                external_files.insert(external.path);
+            }
         }
     }
 
@@ -54,8 +61,8 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
     let tempdir = tempfile::tempdir()?;
 
     log::info!(
-        "Found {} weave fragments, writing to {tempdir:?}...",
-        scripts.len()
+        "Found {} weave fragments, {} external files, writing to {tempdir:?}...",
+        scripts.len(), external_files.len()
     );
 
     for (_, file) in scripts.iter_mut() {
@@ -67,6 +74,20 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
         file.file_path = path;
     }
 
+    // Copy external files from local dir to tempdir
+    for file in &external_files {
+        let path = tempdir.as_ref().join(file);
+
+        // Make sure any possible subdirectories exist in temp target.
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::copy(file, &path)?;
+    }
+
+    // Run the scripts and modify the outline with evaluation metadata and
+    // output.
     for (i, (entered_script, s)) in outline.context_iter_mut(false).enumerate()
     {
         if *entered_script || weave_filename(&s.head).is_some() {
@@ -90,6 +111,7 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
                 log::info!("Running script {:?}", script.file_path);
 
                 let mut child = Command::new("sh")
+                    .current_dir(tempdir.as_ref())
                     .arg("-c")
                     .arg(&script.file_path)
                     .stdout(Stdio::piped())
@@ -119,6 +141,7 @@ pub fn run(force: bool, io: IoPipe) -> Result<()> {
     io.write(&outline.children[0].body)
 }
 
+/// Script embedded in the outline.
 #[derive(Default, Debug)]
 struct Script {
     /// True if the source did not have an input hash or if the current text
@@ -232,4 +255,28 @@ fn weave_filename(head: &str) -> Option<&str> {
     }
 
     Some(head)
+}
+
+/// Reference to an external file in the notebook directory that should be
+/// copied to the execution directory. The syntax for external files is a
+/// weave filename line `>image.png`, with no body lines under it.
+#[derive(Default, Debug)]
+struct ExternalFile {
+    path: String,
+}
+
+impl TryFrom<&Section> for ExternalFile {
+    type Error = ();
+
+    fn try_from(section: &Section) -> std::result::Result<Self, Self::Error> {
+        let Some(path) = weave_filename(&section.head) else {
+            return Err(());
+        };
+        if !section.body.is_empty() {
+            return Err(());
+        }
+        Ok(ExternalFile {
+            path: path.to_owned(),
+        })
+    }
 }

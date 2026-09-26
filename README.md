@@ -78,3 +78,11 @@ Some of the current ones:
   ==
     Hello, world! 6
   ```
+
+  You can copy data files from the local directory to the script execution directory by having empty sections with the name of the local file.
+
+  ```
+  Line below tries to copy over a local `image.png` file
+  >image.png
+  Since it has no indented body below it
+  ```
