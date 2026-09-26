@@ -148,27 +148,6 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
-    /// Format table columns.
-    Tf {
-        /// Treat every column as left-aligned textual data, don't try to
-        /// detect columns of numeric data.
-        #[arg(long)]
-        no_number_parsing: bool,
-
-        /// Clear output values from all spreadsheet cells, leaving only
-        /// formulas. Run this to make batch editing the formulas easier.
-        #[arg(long)]
-        clear_outputs: bool,
-
-        /// How many columns to align, if set to 0, align every column
-        /// shared by all nonempty rows.
-        #[arg(long, default_value = "0")]
-        num_columns: usize,
-
-        #[command(flatten)]
-        io: IoArgs,
-    },
-
     /// Weave outputs of embedded scripts into file.
     Weave {
         /// Ignore cache annotations and re-run all scripts.
@@ -349,15 +328,6 @@ fn main() -> Result<()> {
             }
             io.write_text(&out)
         }
-
-        Tf {
-            no_number_parsing,
-            clear_outputs: clear_cells,
-            num_columns,
-            io,
-        } => {
-            tf::run(no_number_parsing, clear_cells, num_columns, io.try_into()?)
-        }
     }
 }
 
@@ -368,7 +338,6 @@ mod raindrop;
 mod replace_tags;
 mod sort_by;
 mod tagged;
-mod tf;
 mod weave;
 
 /// Standard input/output specification for subcommands.
